@@ -25,6 +25,13 @@ public static class GameSetup
         BuildScene();
     }
 
+    [MenuItem("Tools/Subway Runner/Debug Start Run")]
+    public static void DebugStartRun()
+    {
+        if (Application.isPlaying && GameManager.Instance != null)
+            GameManager.Instance.StartRun();
+    }
+
     static void EnsureScene()
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode) return;
