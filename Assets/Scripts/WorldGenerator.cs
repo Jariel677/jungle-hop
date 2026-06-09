@@ -373,7 +373,14 @@ public class WorldGenerator : MonoBehaviour
     // ------------------------------------------------- hazards/coins/powers
     void SpawnRow(float z)
     {
-        int hazardCount = Random.value < 0.25f ? 0 : (Random.value < 0.62f ? 1 : 2);
+        // Difficulty ramps with distance: fewer empty rows, more double-blocks
+        // (but never all three lanes, so a path always exists).
+        GameManager gm = GameManager.Instance;
+        float diff = gm != null ? Mathf.Clamp01(gm.Distance / 2500f) : 0f;
+        float zeroChance = Mathf.Lerp(0.30f, 0.10f, diff);
+        float twoChance = Mathf.Lerp(0.16f, 0.50f, diff);
+        float roll = Random.value;
+        int hazardCount = roll < zeroChance ? 0 : (roll > 1f - twoChance ? 2 : 1);
 
         int[] lanes = { 0, 1, 2 };
         for (int i = 0; i < 3; i++)

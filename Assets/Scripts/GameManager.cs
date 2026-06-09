@@ -35,10 +35,22 @@ public class GameManager : MonoBehaviour
     const float ComboWindow = 3f;
     int _combo;
     float _comboTimer;
-    float _nearMissFlash;
     public int BestCombo { get; private set; }
     bool _newBest;
     float _runTime;
+
+    // Shared transient pop-up (near-miss, milestone, ...).
+    float _flash;
+    string _flashText = "";
+    Color _flashColor = Color.white;
+    int _nextMilestone = 500;
+
+    void Flash(string text, Color color)
+    {
+        _flash = 1f;
+        _flashText = text;
+        _flashColor = color;
+    }
 
     public PlayerController Player { get; private set; }
     public WorldGenerator World { get; private set; }
@@ -212,7 +224,7 @@ public class GameManager : MonoBehaviour
             if (_hitStopTimer <= 0f) Time.timeScale = 1f;
         }
         if (_coinPulse > 0f) _coinPulse -= Time.unscaledDeltaTime * 3.2f;
-        if (_nearMissFlash > 0f) _nearMissFlash -= Time.unscaledDeltaTime * 1.5f;
+        if (_flash > 0f) _flash -= Time.unscaledDeltaTime * 1.5f;
 
         if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.P))
             TogglePause();
@@ -228,6 +240,12 @@ public class GameManager : MonoBehaviour
                 _comboTimer -= Time.deltaTime;
                 if (_comboTimer <= 0f) _combo = 0;
             }
+            while (Distance >= _nextMilestone)
+            {
+                Bonus += 25;
+                Flash(_nextMilestone + " m", new Color(1f, 0.85f, 0.3f));
+                _nextMilestone += 500;
+            }
         }
     }
 
@@ -239,7 +257,7 @@ public class GameManager : MonoBehaviour
         if (_combo > BestCombo) BestCombo = _combo;
         _comboTimer = ComboWindow;
         Bonus += 10 * _combo * Multiplier;
-        _nearMissFlash = 1f;
+        Flash(_combo > 1 ? "NEAR MISS  x" + _combo : "NEAR MISS", new Color(0.4f, 1f, 0.5f));
         if (Cam != null && GameData.ScreenShake) Cam.Shake(0.04f);
     }
 
@@ -422,16 +440,15 @@ public class GameManager : MonoBehaviour
                 _power_.normal.textColor = prev;
             }
 
-            if (CurrentState == State.Playing && _combo > 0 && _nearMissFlash > 0f)
+            if (CurrentState == State.Playing && !_paused && _flash > 0f && _flashText.Length > 0)
             {
                 Color prevC = GUI.color;
-                float a = Mathf.Clamp01(_nearMissFlash);
-                GUI.color = new Color(0.4f, 1f, 0.5f, a);
+                float a = Mathf.Clamp01(_flash);
+                GUI.color = new Color(_flashColor.r, _flashColor.g, _flashColor.b, a);
                 int fs0 = _big.fontSize;
                 _big.fontSize = Mathf.RoundToInt(fs0 * (0.7f + a * 0.35f));
-                string label = _combo > 1 ? "NEAR MISS  x" + _combo : "NEAR MISS";
                 GUI.Label(new Rect(0f, Screen.height * 0.28f, Screen.width, Screen.height * 0.12f),
-                          label, _big);
+                          _flashText, _big);
                 _big.fontSize = fs0;
                 GUI.color = prevC;
             }
