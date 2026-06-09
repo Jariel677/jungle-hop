@@ -125,7 +125,10 @@ public class MenuUI : MonoBehaviour
         GUILayout.Space(Screen.height * 0.03f);
 
         if (GUILayout.Button("PLAY", _btnBig, GUILayout.Height(Screen.height * 0.12f)))
+        {
+            if (AudioManager.Instance != null) AudioManager.Instance.Click();
             GameManager.Instance.StartRun();
+        }
 
         GUILayout.Space(Screen.height * 0.02f);
         if (GUILayout.Button("SHOP", _btn, GUILayout.Height(BtnH))) _page = Page.Shop;
@@ -222,6 +225,7 @@ public class MenuUI : MonoBehaviour
 
     void BuyCharacter(CharacterDef c)
     {
+        if (AudioManager.Instance != null) AudioManager.Instance.Click();
         if (GameData.Coins >= c.cost)
         {
             GameData.Coins -= c.cost;
@@ -234,6 +238,7 @@ public class MenuUI : MonoBehaviour
 
     void EquipCharacter(CharacterDef c)
     {
+        if (AudioManager.Instance != null) AudioManager.Instance.Click();
         GameData.EquippedCharacter = c.id;
         GameData.Save();
         if (GameManager.Instance.Player != null)
@@ -243,6 +248,7 @@ public class MenuUI : MonoBehaviour
 
     void BuyBoard(BoardDef b)
     {
+        if (AudioManager.Instance != null) AudioManager.Instance.Click();
         if (GameData.Coins >= b.cost)
         {
             GameData.Coins -= b.cost;
@@ -255,6 +261,7 @@ public class MenuUI : MonoBehaviour
 
     void EquipBoard(BoardDef b)
     {
+        if (AudioManager.Instance != null) AudioManager.Instance.Click();
         GameData.EquippedBoard = b.id;
         GameData.Save();
         if (GameManager.Instance.Player != null)
@@ -309,6 +316,28 @@ public class MenuUI : MonoBehaviour
         {
             GameData.ScreenShake = !GameData.ScreenShake;
             GameData.Save();
+        }
+
+        GUILayout.Space(Screen.height * 0.012f);
+        if (GUILayout.Button("Music:   " + (GameData.Music ? "ON" : "OFF"),
+                             _btn, GUILayout.Height(BtnH)))
+        {
+            GameData.Music = !GameData.Music;
+            GameData.Save();
+            if (AudioManager.Instance != null) AudioManager.Instance.SetMusic(GameData.Music);
+        }
+
+        GUILayout.Space(Screen.height * 0.012f);
+        if (GUILayout.Button("Hazard Cues:   " + (GameData.HighContrast ? "ON" : "OFF"),
+                             _btn, GUILayout.Height(BtnH)))
+        {
+            GameData.HighContrast = !GameData.HighContrast;
+            GameData.Save();
+            if (GameManager.Instance != null && GameManager.Instance.World != null)
+                GameManager.Instance.World.RefreshHazardCues();
+            Toast(GameData.HighContrast
+                ? "Hazard cues on — markers show jump / slide / dodge"
+                : "Hazard cues off");
         }
 
         GUILayout.Space(Screen.height * 0.04f);

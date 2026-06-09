@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.SceneManagement;
 
 /// <summary>
@@ -14,7 +15,7 @@ public class GameManager : MonoBehaviour
     public enum State { Menu, Playing, GameOver }
     public State CurrentState { get; private set; }
 
-    public enum PowerUp { None, Magnet, Jetpack, Double, Sneakers }
+    public enum PowerUp { None, Magnet, Jetpack, Double, Sneakers, Shield }
 
     public static readonly float[] LaneX = { -2.6f, 0f, 2.6f };
 
@@ -28,7 +29,14 @@ public class GameManager : MonoBehaviour
     public float Distance { get; private set; }
     public int Coins { get; private set; }
     public int RunPowerUps { get; private set; }
-    public int Score { get { return Mathf.FloorToInt(Distance) + Coins * 5; } }
+    public int Bonus { get; private set; }
+    public int Score { get { return Mathf.FloorToInt(Distance) + Coins * 5 + Bonus; } }
+
+    const float ComboWindow = 3f;
+    int _combo;
+    float _comboTimer;
+    float _nearMissFlash;
+    public int BestCombo { get; private set; }
 
     public PlayerController Player { get; private set; }
     public WorldGenerator World { get; private set; }
@@ -42,6 +50,10 @@ public class GameManager : MonoBehaviour
     public int Multiplier { get { return ActivePower == PowerUp.Double ? 2 : 1; } }
 
     float _hitStopTimer;
+    float _coinPulse;
+    bool _paused;
+
+    public bool IsPaused { get { return _paused; } }
 
     public static Color PowerColor(PowerUp p)
     {
@@ -51,6 +63,7 @@ public class GameManager : MonoBehaviour
             case PowerUp.Jetpack: return new Color(1f, 0.55f, 0.15f);
             case PowerUp.Double: return new Color(0.32f, 0.9f, 0.36f);
             case PowerUp.Sneakers: return new Color(1f, 0.42f, 0.72f);
+            case PowerUp.Shield: return new Color(0.55f, 0.82f, 1f);
             default: return Color.white;
         }
     }
@@ -63,6 +76,7 @@ public class GameManager : MonoBehaviour
             case PowerUp.Jetpack: return "JETPACK";
             case PowerUp.Double: return "2X SCORE";
             case PowerUp.Sneakers: return "SUPER SNEAKERS";
+            case PowerUp.Shield: return "SHIELD";
             default: return "";
         }
     }
@@ -94,6 +108,15 @@ public class GameManager : MonoBehaviour
         light.shadows = LightShadows.Soft;
         sun.transform.rotation = Quaternion.Euler(44f, 32f, 0f);
         RenderSettings.sun = light;
+
+        GameObject fill = new GameObject("Fill Light");
+        fill.transform.SetParent(transform);
+        Light fillLight = fill.AddComponent<Light>();
+        fillLight.type = LightType.Directional;
+        fillLight.intensity = 0.42f;
+        fillLight.color = new Color(0.62f, 0.72f, 0.96f);
+        fillLight.shadows = LightShadows.None;
+        fill.transform.rotation = Quaternion.Euler(34f, -148f, 0f);
 
         Shader skyShader = Shader.Find("Skybox/Procedural");
         if (skyShader != null)
@@ -130,13 +153,53 @@ public class GameManager : MonoBehaviour
         cam.farClipPlane = 240f;
         Cam = camGo.AddComponent<CameraRig>();
         Cam.target = playerGo.transform;
+        SetupPostFX(camGo);
 
         GameObject worldGo = new GameObject("World");
         worldGo.transform.SetParent(transform);
         World = worldGo.AddComponent<WorldGenerator>();
         World.player = Player;
 
+        gameObject.AddComponent<AudioManager>();
         gameObject.AddComponent<MenuUI>();
+    }
+
+    void SetupPostFX(GameObject camGo)
+    {
+        PPResourcesHolder holder = Resources.Load<PPResourcesHolder>("PPResourcesHolder");
+        if (holder == null || holder.resources == null) return;
+
+        PostProcessLayer layer = camGo.AddComponent<PostProcessLayer>();
+        layer.Init(holder.resources);
+        layer.volumeTrigger = camGo.transform;
+        layer.volumeLayer = 1;
+        layer.antialiasingMode = PostProcessLayer.Antialiasing.FastApproximateAntialiasing;
+
+        PostProcessProfile profile = ScriptableObject.CreateInstance<PostProcessProfile>();
+
+        Bloom bloom = profile.AddSettings<Bloom>();
+        bloom.active = true;
+        bloom.intensity.Override(3.4f);
+        bloom.threshold.Override(1.0f);
+        bloom.softKnee.Override(0.55f);
+
+        ColorGrading grading = profile.AddSettings<ColorGrading>();
+        grading.active = true;
+        grading.contrast.Override(11f);
+        grading.saturation.Override(16f);
+        grading.temperature.Override(5f);
+
+        Vignette vignette = profile.AddSettings<Vignette>();
+        vignette.active = true;
+        vignette.intensity.Override(0.3f);
+        vignette.smoothness.Override(0.45f);
+
+        GameObject volGo = new GameObject("PostFX Volume");
+        volGo.transform.SetParent(transform);
+        PostProcessVolume volume = volGo.AddComponent<PostProcessVolume>();
+        volume.isGlobal = true;
+        volume.priority = 1f;
+        volume.profile = profile;
     }
 
     void Update()
@@ -146,13 +209,35 @@ public class GameManager : MonoBehaviour
             _hitStopTimer -= Time.unscaledDeltaTime;
             if (_hitStopTimer <= 0f) Time.timeScale = 1f;
         }
+        if (_coinPulse > 0f) _coinPulse -= Time.unscaledDeltaTime * 3.2f;
+        if (_nearMissFlash > 0f) _nearMissFlash -= Time.unscaledDeltaTime * 1.5f;
 
-        if (CurrentState == State.Playing)
+        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.P))
+            TogglePause();
+
+        if (CurrentState == State.Playing && !_paused)
         {
             Speed = Mathf.Min(MaxSpeed, Speed + Acceleration * Time.deltaTime);
             Distance += Speed * Time.deltaTime * Multiplier;
             if (_powerTimer > 0f) _powerTimer -= Time.deltaTime;
+            if (_comboTimer > 0f)
+            {
+                _comboTimer -= Time.deltaTime;
+                if (_comboTimer <= 0f) _combo = 0;
+            }
         }
+    }
+
+    /// <summary>Awards a near-miss: builds the dodge combo and grants escalating bonus points.</summary>
+    public void NearMiss()
+    {
+        if (CurrentState != State.Playing || _paused) return;
+        _combo++;
+        if (_combo > BestCombo) BestCombo = _combo;
+        _comboTimer = ComboWindow;
+        Bonus += 10 * _combo * Multiplier;
+        _nearMissFlash = 1f;
+        if (Cam != null && GameData.ScreenShake) Cam.Shake(0.04f);
     }
 
     public void StartRun()
@@ -160,9 +245,32 @@ public class GameManager : MonoBehaviour
         if (CurrentState == State.Menu) CurrentState = State.Playing;
     }
 
+    public void TogglePause()
+    {
+        if (CurrentState != State.Playing) return;
+        if (_paused) Resume(); else Pause();
+    }
+
+    void Pause()
+    {
+        _paused = true;
+        Time.timeScale = 0f;
+        if (AudioManager.Instance != null) AudioManager.Instance.Click();
+    }
+
+    void Resume()
+    {
+        _paused = false;
+        // _hitStopTimer is never active during normal play, so restoring to 1 is safe.
+        Time.timeScale = 1f;
+        if (AudioManager.Instance != null) AudioManager.Instance.Click();
+    }
+
     public void AddCoin()
     {
         Coins += Multiplier;
+        _coinPulse = 1f;
+        if (AudioManager.Instance != null) AudioManager.Instance.Coin();
     }
 
     public void ActivatePower(PowerUp p)
@@ -175,8 +283,22 @@ public class GameManager : MonoBehaviour
             case PowerUp.Jetpack: _powerTimer = 4.5f; break;
             case PowerUp.Double: _powerTimer = 9f; break;
             case PowerUp.Sneakers: _powerTimer = 8f; break;
+            case PowerUp.Shield: _powerTimer = 10f; break;
         }
         if (Cam != null) Cam.Shake(0.12f);
+        if (AudioManager.Instance != null) AudioManager.Instance.PowerUp();
+    }
+
+    /// <summary>If a shield is active, spends it (saving the run) and returns true.</summary>
+    public bool ConsumeShield()
+    {
+        if (ActivePower != PowerUp.Shield) return false;
+        _powerTimer = 0f;
+        _power = PowerUp.None;
+        if (Cam != null && GameData.ScreenShake) Cam.Shake(0.2f);
+        HitStop(0.08f, 0.15f);
+        if (AudioManager.Instance != null) AudioManager.Instance.PowerUp();
+        return true;
     }
 
     public void HitStop(float duration, float scale)
@@ -196,6 +318,7 @@ public class GameManager : MonoBehaviour
             if (Cam != null && GameData.ScreenShake) Cam.Shake(0.6f);
             HitStop(0.16f, 0.05f);
         }
+        if (AudioManager.Instance != null) AudioManager.Instance.Crash();
 
         GameData.Coins += Coins;
         if (Score > GameData.HighScore) GameData.HighScore = Score;
@@ -260,12 +383,22 @@ public class GameManager : MonoBehaviour
         {
             GUI.Label(new Rect(pad, pad, Screen.width * 0.6f, Screen.height * 0.1f),
                       "SCORE  " + Score, _hud);
+            int sub0 = _sub.fontSize;
+            if (_coinPulse > 0f)
+                _sub.fontSize = Mathf.RoundToInt(sub0 * (1f + Mathf.Clamp01(_coinPulse) * 0.4f));
             GUI.Label(new Rect(pad, pad + Screen.height * 0.062f, Screen.width * 0.6f, Screen.height * 0.08f),
                       "COINS  " + Coins, _sub);
-            GUI.Label(new Rect(Screen.width * 0.35f, pad, Screen.width * 0.65f - pad, Screen.height * 0.1f),
+            _sub.fontSize = sub0;
+            float pauseBtn = Screen.height * 0.07f;
+            GUI.Label(new Rect(Screen.width * 0.35f, pad, Screen.width * 0.65f - pad * 2f - pauseBtn,
+                               Screen.height * 0.1f),
                       "BEST  " + GameData.HighScore, _hudRight);
 
-            if (CurrentState == State.Playing && ActivePower != PowerUp.None)
+            if (CurrentState == State.Playing && !_paused &&
+                GUI.Button(new Rect(Screen.width - pad - pauseBtn, pad, pauseBtn, pauseBtn), "II", _btn))
+                TogglePause();
+
+            if (CurrentState == State.Playing && !_paused && ActivePower != PowerUp.None)
             {
                 float pw = Screen.width * 0.42f;
                 Rect pr = new Rect((Screen.width - pw) * 0.5f, pad, pw, Screen.height * 0.072f);
@@ -274,6 +407,20 @@ public class GameManager : MonoBehaviour
                 _power_.normal.textColor = PowerColor(ActivePower);
                 GUI.Label(pr, PowerName(ActivePower) + "   " + Mathf.CeilToInt(PowerTimeLeft) + "s", _power_);
                 _power_.normal.textColor = prev;
+            }
+
+            if (CurrentState == State.Playing && _combo > 0 && _nearMissFlash > 0f)
+            {
+                Color prevC = GUI.color;
+                float a = Mathf.Clamp01(_nearMissFlash);
+                GUI.color = new Color(0.4f, 1f, 0.5f, a);
+                int fs0 = _big.fontSize;
+                _big.fontSize = Mathf.RoundToInt(fs0 * (0.7f + a * 0.35f));
+                string label = _combo > 1 ? "NEAR MISS  x" + _combo : "NEAR MISS";
+                GUI.Label(new Rect(0f, Screen.height * 0.28f, Screen.width, Screen.height * 0.12f),
+                          label, _big);
+                _big.fontSize = fs0;
+                GUI.color = prevC;
             }
         }
 
@@ -289,6 +436,14 @@ public class GameManager : MonoBehaviour
             GUI.Label(new Rect(p.x, p.y + ph * 0.37f, pw, ph * 0.09f), "Coins this run   " + Coins, _mid);
             GUI.Label(new Rect(p.x, p.y + ph * 0.47f, pw, ph * 0.09f), "Total coins   " + GameData.Coins, _mid);
             GUI.Label(new Rect(p.x, p.y + ph * 0.57f, pw, ph * 0.09f), "Best   " + GameData.HighScore, _mid);
+            if (BestCombo > 1)
+            {
+                Color prevC = _mid.normal.textColor;
+                _mid.normal.textColor = new Color(0.45f, 1f, 0.55f);
+                GUI.Label(new Rect(p.x, p.y + ph * 0.665f, pw, ph * 0.08f),
+                          "Best dodge combo   x" + BestCombo, _mid);
+                _mid.normal.textColor = prevC;
+            }
 
             float bw = pw * 0.42f, bh = ph * 0.15f, gap = pw * 0.06f;
             if (GUI.Button(new Rect(p.x + (pw - bw * 2f - gap) * 0.5f, p.y + ph * 0.78f, bw, bh),
@@ -296,6 +451,26 @@ public class GameManager : MonoBehaviour
                 PlayAgain();
             if (GUI.Button(new Rect(p.x + (pw - bw * 2f - gap) * 0.5f + bw + gap, p.y + ph * 0.78f, bw, bh),
                            "HOME", _btn))
+                Restart();
+        }
+
+        if (_paused && CurrentState == State.Playing)
+        {
+            GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _pill);
+
+            float pw = Mathf.Min(Screen.width * 0.7f, 600f);
+            float ph = Screen.height * 0.5f;
+            Rect p = new Rect((Screen.width - pw) * 0.5f, (Screen.height - ph) * 0.5f, pw, ph);
+            GUI.DrawTexture(p, _panel);
+
+            GUI.Label(new Rect(p.x, p.y + ph * 0.1f, pw, ph * 0.2f), "PAUSED", _big);
+            GUI.Label(new Rect(p.x, p.y + ph * 0.33f, pw, ph * 0.12f),
+                      "Score   " + Score, _mid);
+
+            float bw = pw * 0.62f, bh = ph * 0.17f;
+            if (GUI.Button(new Rect(p.x + (pw - bw) * 0.5f, p.y + ph * 0.52f, bw, bh), "RESUME", _btn))
+                Resume();
+            if (GUI.Button(new Rect(p.x + (pw - bw) * 0.5f, p.y + ph * 0.73f, bw, bh), "HOME", _btn))
                 Restart();
         }
     }

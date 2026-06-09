@@ -19,7 +19,7 @@ public class WorldGenerator : MonoBehaviour
     const float SpawnAhead = 150f;
     const float DespawnBehind = 26f;
 
-    class Hazard { public GameObject go; public Bounds bounds; }
+    class Hazard { public GameObject go; public Bounds bounds; public int kind; public float centerY; public bool passed; }
     class Pickup { public GameObject go; public float baseY; }
     class Power { public GameObject go; public GameManager.PowerUp type; public float baseY; }
 
@@ -38,13 +38,16 @@ public class WorldGenerator : MonoBehaviour
     Material _barrier, _stripe, _train, _trainTrim, _trainWin, _gate, _sign;
     Material _coinMat, _powerCore;
     Material[] _powerMat;
+    Material _markJump, _markSlide, _markDodge;
 
     GameObject[] _buildings;
+    GameObject[] _cars;
 
     void Start()
     {
         BuildPalette();
         _buildings = LoadBuildings();
+        _cars = LoadCars();
         _nextTileZ = -TileLength;
         for (int i = 0; i < TileCount; i++) SpawnTile();
     }
@@ -63,6 +66,23 @@ public class WorldGenerator : MonoBehaviour
         foreach (string n in names)
         {
             GameObject g = Resources.Load<GameObject>("CityKit/" + n);
+            if (g != null) list.Add(g);
+        }
+        return list.ToArray();
+    }
+
+    GameObject[] LoadCars()
+    {
+        string[] names =
+        {
+            "sedan", "sedan-sports", "suv", "suv-luxury", "taxi", "police",
+            "hatchback-sports", "ambulance", "delivery", "garbage-truck",
+            "firetruck", "truck-flat", "van",
+        };
+        List<GameObject> list = new List<GameObject>();
+        foreach (string n in names)
+        {
+            GameObject g = Resources.Load<GameObject>("CarKit/" + n);
             if (g != null) list.Add(g);
         }
         return list.ToArray();
@@ -97,12 +117,17 @@ public class WorldGenerator : MonoBehaviour
         _coinMat = Art.Glow(new Color(1f, 0.82f, 0.13f), new Color(0.85f, 0.6f, 0.05f), 0.85f);
         _powerCore = Art.Mat(new Color(0.97f, 0.97f, 1f), 0f, 0.6f);
 
-        _powerMat = new Material[5];
-        for (int i = 1; i <= 4; i++)
+        _powerMat = new Material[6];
+        for (int i = 1; i <= 5; i++)
         {
             Color c = GameManager.PowerColor((GameManager.PowerUp)i);
             _powerMat[i] = Art.Glow(c, c * 0.7f, 0.75f);
         }
+
+        // High-contrast accessibility markers — colour encodes the required action.
+        _markJump = Art.Glow(new Color(0.25f, 1f, 0.4f), new Color(0.2f, 0.95f, 0.35f), 0.8f);
+        _markSlide = Art.Glow(new Color(0.3f, 0.85f, 1f), new Color(0.25f, 0.78f, 0.97f), 0.8f);
+        _markDodge = Art.Glow(new Color(1f, 0.32f, 0.86f), new Color(0.92f, 0.26f, 0.8f), 0.8f);
     }
 
     void Update()
@@ -148,6 +173,14 @@ public class WorldGenerator : MonoBehaviour
             {
                 if (_hazards[i].go != null && pb.Intersects(_hazards[i].bounds))
                 {
+                    if (gm.ConsumeShield())
+                    {
+                        Effects.Crash(_hazards[i].go.transform.position,
+                                      GameManager.PowerColor(GameManager.PowerUp.Shield));
+                        Destroy(_hazards[i].go);
+                        _hazards.RemoveAt(i);
+                        break;
+                    }
                     gm.GameOver();
                     return;
                 }
@@ -179,6 +212,27 @@ public class WorldGenerator : MonoBehaviour
                 Effects.Pickup(pg.transform.position, GameManager.PowerColor(_powers[i].type));
                 Destroy(pg);
                 _powers.RemoveAt(i);
+            }
+        }
+
+        // Near-miss combo: passing a hazard in your own lane means you jumped or
+        // slid past it — reward the skilful dodge. Jetpack flies over everything,
+        // so it does not count.
+        if (gm.ActivePower != GameManager.PowerUp.Jetpack)
+        {
+            for (int i = 0; i < _hazards.Count; i++)
+            {
+                Hazard h = _hazards[i];
+                if (h.go == null || h.passed) continue;
+                if (h.go.transform.position.z < playerPos.z)
+                {
+                    h.passed = true;
+                    if (Mathf.Abs(h.bounds.center.x - playerPos.x) < 1.3f)
+                    {
+                        gm.NearMiss();
+                        Effects.CoinSparkle(h.bounds.center + new Vector3(0f, 0.4f, 0f));
+                    }
+                }
             }
         }
     }
@@ -231,11 +285,28 @@ public class WorldGenerator : MonoBehaviour
     {
         SpawnBuilding(-1, z);
         SpawnBuilding(1, z);
-        if (_propParity++ % 2 == 0)
+        if (_propParity % 2 == 0)
         {
             SpawnLamp(-1, z + PropGap * 0.5f);
             SpawnLamp(1, z + PropGap * 0.5f);
         }
+        if (_cars != null && _cars.Length > 0 && Random.value < 0.75f)
+            SpawnCar(_propParity % 2 == 0 ? -1 : 1, z);
+        _propParity++;
+    }
+
+    void SpawnCar(int side, float z)
+    {
+        GameObject prefab = _cars[Random.Range(0, _cars.Length)];
+        GameObject car = Instantiate(prefab);
+        car.name = "Car";
+        car.transform.SetParent(transform);
+        float sc = Random.Range(2.5f, 3.3f);
+        car.transform.localScale = new Vector3(sc, sc, sc);
+        car.transform.position = new Vector3(side * Random.Range(7.4f, 9.6f),
+                                             0f, z + Random.Range(-2f, 2f));
+        car.transform.rotation = Quaternion.Euler(0f, Random.value < 0.5f ? 0f : 180f, 0f);
+        _props.Add(car);
     }
 
     void SpawnBuilding(int side, float z)
@@ -246,9 +317,9 @@ public class WorldGenerator : MonoBehaviour
             GameObject kb = Instantiate(prefab);
             kb.name = "Building";
             kb.transform.SetParent(transform);
-            float sc = Random.Range(4.5f, 8.5f);
-            kb.transform.localScale = new Vector3(sc, sc * Random.Range(0.85f, 1.6f), sc);
-            kb.transform.position = new Vector3(side * Random.Range(9f, 17f),
+            float sc = Random.Range(4f, 7f);
+            kb.transform.localScale = new Vector3(sc, sc * Random.Range(0.9f, 1.7f), sc);
+            kb.transform.position = new Vector3(side * Random.Range(11.5f, 21f),
                                                 0f, z + Random.Range(-3f, 3f));
             kb.transform.rotation = Quaternion.Euler(0f, side > 0 ? -90f : 90f, 0f);
             _props.Add(kb);
@@ -315,7 +386,9 @@ public class WorldGenerator : MonoBehaviour
         for (int i = 0; i < hazardCount; i++)
         {
             blocked[lanes[i]] = true;
-            SpawnHazard(lanes[i], z);
+            int hk = SpawnHazard(lanes[i], z);
+            // Tempt a jump: arc collectible coins over a low barrier.
+            if (hk == 0 && Random.value < 0.5f) SpawnCoinArc(lanes[i], z);
         }
 
         int coinLane = -1;
@@ -333,12 +406,12 @@ public class WorldGenerator : MonoBehaviour
 
         if (coinLane >= 0 && Random.value < 0.14f)
         {
-            GameManager.PowerUp type = (GameManager.PowerUp)Random.Range(1, 5);
+            GameManager.PowerUp type = (GameManager.PowerUp)Random.Range(1, 6);
             SpawnPowerUp(coinLane, z + 7f, type);
         }
     }
 
-    void SpawnHazard(int lane, float z)
+    int SpawnHazard(int lane, float z)
     {
         // kind 0 = low barrier (jump), 1 = train (switch lane), 2 = gate (slide)
         int kind = Random.value < 0.45f ? 0 : (Random.value < 0.72f ? 1 : 2);
@@ -368,7 +441,61 @@ public class WorldGenerator : MonoBehaviour
         else if (kind == 1) BuildTrain(go.transform);
         else BuildGate(go.transform);
 
-        _hazards.Add(new Hazard { go = go, bounds = new Bounds(center, size) });
+        if (GameData.HighContrast)
+            BuildHazardMarker(go.transform, kind, 4.4f - center.y);
+
+        _hazards.Add(new Hazard { go = go, bounds = new Bounds(center, size), kind = kind, centerY = center.y });
+        return kind;
+    }
+
+    /// <summary>Adds or removes high-contrast cues on all live hazards to match the setting.</summary>
+    public void RefreshHazardCues()
+    {
+        bool on = GameData.HighContrast;
+        for (int i = 0; i < _hazards.Count; i++)
+        {
+            GameObject go = _hazards[i].go;
+            if (go == null) continue;
+
+            bool hasCue = go.transform.Find("Cue") != null;
+            if (on && !hasCue)
+            {
+                BuildHazardMarker(go.transform, _hazards[i].kind, 4.4f - _hazards[i].centerY);
+            }
+            else if (!on && hasCue)
+            {
+                for (int c = go.transform.childCount - 1; c >= 0; c--)
+                {
+                    Transform child = go.transform.GetChild(c);
+                    if (child.name == "Cue") Destroy(child.gameObject);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Floating action cue shown above a hazard in high-contrast mode: a green
+    /// up-chevron (jump), cyan down-chevron (slide) or magenta X (switch lane).
+    /// </summary>
+    void BuildHazardMarker(Transform parent, int kind, float y)
+    {
+        Vector3 bar = new Vector3(0.16f, 0.78f, 0.16f);
+        if (kind == 1) // train: switch lanes — an X
+        {
+            GameObject a = Art.Solid(PrimitiveType.Cube, parent, new Vector3(0f, y, 0f), bar, _markDodge, "Cue");
+            a.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+            GameObject b = Art.Solid(PrimitiveType.Cube, parent, new Vector3(0f, y, 0f), bar, _markDodge, "Cue");
+            b.transform.localRotation = Quaternion.Euler(0f, 0f, -45f);
+            return;
+        }
+
+        // Chevron: up for jump (kind 0), down for slide (kind 2).
+        Material m = kind == 0 ? _markJump : _markSlide;
+        float left = kind == 0 ? -40f : 40f;
+        GameObject l = Art.Solid(PrimitiveType.Cube, parent, new Vector3(-0.25f, y, 0f), bar, m, "Cue");
+        l.transform.localRotation = Quaternion.Euler(0f, 0f, left);
+        GameObject r = Art.Solid(PrimitiveType.Cube, parent, new Vector3(0.25f, y, 0f), bar, m, "Cue");
+        r.transform.localRotation = Quaternion.Euler(0f, 0f, -left);
     }
 
     void BuildBarrier(Transform p)
@@ -417,7 +544,9 @@ public class WorldGenerator : MonoBehaviour
         }
     }
 
-    void SpawnCoin(int lane, float z)
+    void SpawnCoin(int lane, float z) { SpawnCoin(lane, z, 1.0f); }
+
+    void SpawnCoin(int lane, float z, float y)
     {
         GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         go.name = "Coin";
@@ -425,11 +554,24 @@ public class WorldGenerator : MonoBehaviour
         if (col != null) Destroy(col);
         go.transform.SetParent(transform);
         go.transform.localScale = new Vector3(0.62f, 0.07f, 0.62f);
-        go.transform.position = new Vector3(GameManager.LaneX[lane], 1.0f, z);
+        go.transform.position = new Vector3(GameManager.LaneX[lane], y, z);
         go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
         Renderer r = go.GetComponent<Renderer>();
         if (r != null) r.sharedMaterial = _coinMat;
-        _coins.Add(new Pickup { go = go, baseY = 1.0f });
+        _coins.Add(new Pickup { go = go, baseY = y });
+    }
+
+    /// <summary>A shallow arc of coins peaking above a barrier, collected by jumping.</summary>
+    void SpawnCoinArc(int lane, float z)
+    {
+        const int n = 5;
+        for (int k = 0; k < n; k++)
+        {
+            float frac = k / (float)(n - 1);
+            float zz = z - 3f + frac * 6f;
+            float y = 1.5f + Mathf.Sin(frac * Mathf.PI) * 1.15f;
+            SpawnCoin(lane, zz, y);
+        }
     }
 
     void SpawnPowerUp(int lane, float z, GameManager.PowerUp type)

@@ -57,6 +57,12 @@ public static class GameData
         set { PlayerPrefs.SetInt("gd_set_contrast", value ? 1 : 0); }
     }
 
+    public static bool Music
+    {
+        get { return PlayerPrefs.GetInt("gd_set_music", 1) == 1; }
+        set { PlayerPrefs.SetInt("gd_set_music", value ? 1 : 0); }
+    }
+
     // ----- daily reward -----
     static int Today()
     {

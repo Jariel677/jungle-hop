@@ -22,6 +22,9 @@ public class PlayerController : MonoBehaviour
     Transform _rig, _torso, _armL, _armR, _legL, _legR;
     float _runPhase;
 
+    GameObject _shieldBubble;
+    float _shieldPhase;
+
     bool _swiping;
     Vector3 _swipeStart;
     Vector2 _touchStart;
@@ -36,6 +39,75 @@ public class PlayerController : MonoBehaviour
     {
         transform.position = new Vector3(GameManager.LaneX[_lane], 1f, 0f);
         BuildCharacter();
+        BuildTrail();
+    }
+
+    void BuildTrail()
+    {
+        GameObject t = new GameObject("SpeedTrail");
+        t.transform.SetParent(transform, false);
+        t.transform.localPosition = new Vector3(0f, -0.25f, -0.35f);
+        TrailRenderer tr = t.AddComponent<TrailRenderer>();
+        tr.time = 0.32f;
+        tr.startWidth = 0.55f;
+        tr.endWidth = 0.03f;
+        tr.minVertexDistance = 0.08f;
+        Shader sh = Shader.Find("Sprites/Default");
+        if (sh != null) tr.material = new Material(sh);
+        Gradient g = new Gradient();
+        g.SetKeys(
+            new GradientColorKey[]
+            {
+                new GradientColorKey(new Color(0.45f, 0.85f, 1f), 0f),
+                new GradientColorKey(new Color(0.2f, 0.5f, 1f), 1f),
+            },
+            new GradientAlphaKey[]
+            {
+                new GradientAlphaKey(0.5f, 0f),
+                new GradientAlphaKey(0f, 1f),
+            });
+        tr.colorGradient = g;
+    }
+
+    /// <summary>Shows / hides a translucent protective bubble while the shield is active.</summary>
+    void UpdateShield(bool on)
+    {
+        if (on && _shieldBubble == null)
+        {
+            _shieldBubble = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            _shieldBubble.name = "ShieldBubble";
+            Collider col = _shieldBubble.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+            _shieldBubble.transform.SetParent(transform, false);
+            _shieldBubble.transform.localPosition = Vector3.zero;
+
+            Color tint = GameManager.PowerColor(GameManager.PowerUp.Shield);
+            Material m = new Material(Shader.Find("Standard"));
+            m.color = new Color(tint.r, tint.g, tint.b, 0.22f);
+            m.SetFloat("_Mode", 3f);
+            m.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            m.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            m.SetInt("_ZWrite", 0);
+            m.DisableKeyword("_ALPHATEST_ON");
+            m.EnableKeyword("_ALPHABLEND_ON");
+            m.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            m.EnableKeyword("_EMISSION");
+            m.SetColor("_EmissionColor", tint * 0.35f);
+            m.renderQueue = 3000;
+            Renderer r = _shieldBubble.GetComponent<Renderer>();
+            if (r != null) r.sharedMaterial = m;
+        }
+
+        if (_shieldBubble != null)
+        {
+            if (_shieldBubble.activeSelf != on) _shieldBubble.SetActive(on);
+            if (on)
+            {
+                _shieldPhase += Time.deltaTime * 3f;
+                float s = 2.3f + Mathf.Sin(_shieldPhase) * 0.08f;
+                _shieldBubble.transform.localScale = new Vector3(s, s, s);
+            }
+        }
     }
 
     /// <summary>Rebuilds the character + board from the currently equipped items.</summary>
@@ -131,10 +203,12 @@ public class PlayerController : MonoBehaviour
     void Update()
     {
         GameManager gm = GameManager.Instance;
-        bool playing = gm != null && gm.CurrentState == GameManager.State.Playing;
+        bool playing = gm != null && gm.CurrentState == GameManager.State.Playing && !gm.IsPaused;
         bool jetpack = gm != null && gm.ActivePower == GameManager.PowerUp.Jetpack;
 
         if (playing && !jetpack) HandleInput();
+
+        UpdateShield(gm != null && gm.ActivePower == GameManager.PowerUp.Shield);
 
         if (_sliding)
         {
@@ -268,6 +342,7 @@ public class PlayerController : MonoBehaviour
         _vy = JumpVelocity * (sneakers ? 1.45f : 1f);
         _grounded = false;
         Effects.DustPuff(FeetPos());
+        if (AudioManager.Instance != null) AudioManager.Instance.Jump();
     }
 
     void Slide()
@@ -275,5 +350,6 @@ public class PlayerController : MonoBehaviour
         if (!_grounded || _sliding) return;
         _sliding = true;
         _slideTimer = SlideTime;
+        if (AudioManager.Instance != null) AudioManager.Instance.Slide();
     }
 }

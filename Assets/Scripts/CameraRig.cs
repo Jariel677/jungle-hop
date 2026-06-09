@@ -1,8 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// Chase camera. Follows the runner from behind and above, damping lateral
-/// motion so lane switches and jumps stay readable. Supports impact shake.
+/// Chase camera. Follows the runner from behind and above, damps lateral
+/// motion, shakes on impact, and widens its field of view with speed so faster
+/// running feels faster.
 /// </summary>
 public class CameraRig : MonoBehaviour
 {
@@ -10,6 +11,9 @@ public class CameraRig : MonoBehaviour
     public Vector3 offset = new Vector3(0f, 5.3f, -7.6f);
     public float smooth = 8.5f;
 
+    const float BaseFov = 68f;
+
+    Camera _cam;
     float _shake;
 
     /// <summary>Adds an impact shake (decays automatically).</summary>
@@ -20,6 +24,7 @@ public class CameraRig : MonoBehaviour
 
     void Start()
     {
+        _cam = GetComponent<Camera>();
         if (target != null)
             transform.position = new Vector3(target.position.x * 0.4f, offset.y, target.position.z + offset.z);
     }
@@ -42,5 +47,12 @@ public class CameraRig : MonoBehaviour
         Vector3 look = new Vector3(tp.x * 0.5f, 1.6f, tp.z + 9f);
         Quaternion want = Quaternion.LookRotation(look - desired);
         transform.rotation = Quaternion.Slerp(transform.rotation, want, smooth * Time.deltaTime);
+
+        if (_cam != null)
+        {
+            float speed = GameManager.Instance != null ? GameManager.Instance.CurrentSpeed : 0f;
+            float targetFov = BaseFov + Mathf.Clamp(speed - 9f, 0f, 18f) * 0.85f;
+            _cam.fieldOfView = Mathf.Lerp(_cam.fieldOfView, targetFov, 3f * Time.deltaTime);
+        }
     }
 }
