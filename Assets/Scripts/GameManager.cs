@@ -38,6 +38,7 @@ public class GameManager : MonoBehaviour
     float _nearMissFlash;
     public int BestCombo { get; private set; }
     bool _newBest;
+    float _runTime;
 
     public PlayerController Player { get; private set; }
     public WorldGenerator World { get; private set; }
@@ -220,6 +221,7 @@ public class GameManager : MonoBehaviour
         {
             Speed = Mathf.Min(MaxSpeed, Speed + Acceleration * Time.deltaTime);
             Distance += Speed * Time.deltaTime * Multiplier;
+            _runTime += Time.deltaTime;
             if (_powerTimer > 0f) _powerTimer -= Time.deltaTime;
             if (_comboTimer > 0f)
             {
@@ -256,7 +258,11 @@ public class GameManager : MonoBehaviour
     {
         _paused = true;
         Time.timeScale = 0f;
-        if (AudioManager.Instance != null) AudioManager.Instance.Click();
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.Click();
+            AudioManager.Instance.SetMusicPaused(true);
+        }
     }
 
     void Resume()
@@ -264,7 +270,11 @@ public class GameManager : MonoBehaviour
         _paused = false;
         // _hitStopTimer is never active during normal play, so restoring to 1 is safe.
         Time.timeScale = 1f;
-        if (AudioManager.Instance != null) AudioManager.Instance.Click();
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.Click();
+            AudioManager.Instance.SetMusicPaused(false);
+        }
     }
 
     public void AddCoin()
@@ -325,6 +335,7 @@ public class GameManager : MonoBehaviour
         _newBest = Score > GameData.HighScore;
         if (_newBest) GameData.HighScore = Score;
         Missions.ReportRun(Coins, Mathf.FloorToInt(Distance), RunPowerUps);
+        GameData.SeenTutorial = true;
         GameData.Save();
     }
 
@@ -422,6 +433,17 @@ public class GameManager : MonoBehaviour
                 GUI.Label(new Rect(0f, Screen.height * 0.28f, Screen.width, Screen.height * 0.12f),
                           label, _big);
                 _big.fontSize = fs0;
+                GUI.color = prevC;
+            }
+
+            if (CurrentState == State.Playing && !_paused && !GameData.SeenTutorial && _runTime < 5f)
+            {
+                Color prevC = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01(5f - _runTime));
+                float bw = Mathf.Min(Screen.width * 0.9f, 760f);
+                Rect br = new Rect((Screen.width - bw) * 0.5f, Screen.height * 0.8f, bw, Screen.height * 0.08f);
+                GUI.DrawTexture(br, _pill);
+                GUI.Label(br, "← →  switch lanes      ↑  jump      ↓  slide      (swipe works too)", _mid);
                 GUI.color = prevC;
             }
         }

@@ -42,6 +42,14 @@ public class AudioManager : MonoBehaviour
         else _music.Stop();
     }
 
+    /// <summary>Suspends / resumes the track while the game is paused (no-op if music is off).</summary>
+    public void SetMusicPaused(bool paused)
+    {
+        if (_music == null) return;
+        if (paused) { if (_music.isPlaying) _music.Pause(); }
+        else if (GameData.Music) _music.UnPause();
+    }
+
     // ------------------------------------------------------- procedural music
     /// <summary>
     /// Synthesises a short seamless chiptune loop (A-minor pentatonic) at runtime

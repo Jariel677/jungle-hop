@@ -23,7 +23,8 @@ public class PlayerController : MonoBehaviour
     float _runPhase;
 
     GameObject _shieldBubble;
-    float _shieldPhase;
+    GameObject _magnetRing;
+    float _shieldPhase, _magnetPhase;
 
     bool _swiping;
     Vector3 _swipeStart;
@@ -69,6 +70,24 @@ public class PlayerController : MonoBehaviour
         tr.colorGradient = g;
     }
 
+    /// <summary>A collider-free translucent, faintly-glowing material for power-up auras.</summary>
+    static Material AuraMat(Color tint, float alpha)
+    {
+        Material m = new Material(Shader.Find("Standard"));
+        m.color = new Color(tint.r, tint.g, tint.b, alpha);
+        m.SetFloat("_Mode", 3f);
+        m.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        m.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        m.SetInt("_ZWrite", 0);
+        m.DisableKeyword("_ALPHATEST_ON");
+        m.EnableKeyword("_ALPHABLEND_ON");
+        m.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+        m.EnableKeyword("_EMISSION");
+        m.SetColor("_EmissionColor", tint * 0.45f);
+        m.renderQueue = 3000;
+        return m;
+    }
+
     /// <summary>Shows / hides a translucent protective bubble while the shield is active.</summary>
     void UpdateShield(bool on)
     {
@@ -80,22 +99,8 @@ public class PlayerController : MonoBehaviour
             if (col != null) Destroy(col);
             _shieldBubble.transform.SetParent(transform, false);
             _shieldBubble.transform.localPosition = Vector3.zero;
-
-            Color tint = GameManager.PowerColor(GameManager.PowerUp.Shield);
-            Material m = new Material(Shader.Find("Standard"));
-            m.color = new Color(tint.r, tint.g, tint.b, 0.22f);
-            m.SetFloat("_Mode", 3f);
-            m.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            m.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            m.SetInt("_ZWrite", 0);
-            m.DisableKeyword("_ALPHATEST_ON");
-            m.EnableKeyword("_ALPHABLEND_ON");
-            m.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-            m.EnableKeyword("_EMISSION");
-            m.SetColor("_EmissionColor", tint * 0.35f);
-            m.renderQueue = 3000;
             Renderer r = _shieldBubble.GetComponent<Renderer>();
-            if (r != null) r.sharedMaterial = m;
+            if (r != null) r.sharedMaterial = AuraMat(GameManager.PowerColor(GameManager.PowerUp.Shield), 0.22f);
         }
 
         if (_shieldBubble != null)
@@ -106,6 +111,34 @@ public class PlayerController : MonoBehaviour
                 _shieldPhase += Time.deltaTime * 3f;
                 float s = 2.3f + Mathf.Sin(_shieldPhase) * 0.08f;
                 _shieldBubble.transform.localScale = new Vector3(s, s, s);
+            }
+        }
+    }
+
+    /// <summary>Shows / hides a glowing ground ring while the coin magnet is active.</summary>
+    void UpdateMagnet(bool on)
+    {
+        if (on && _magnetRing == null)
+        {
+            _magnetRing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            _magnetRing.name = "MagnetRing";
+            Collider col = _magnetRing.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+            _magnetRing.transform.SetParent(transform, false);
+            _magnetRing.transform.localPosition = new Vector3(0f, -0.85f, 0f);
+            Renderer r = _magnetRing.GetComponent<Renderer>();
+            if (r != null) r.sharedMaterial = AuraMat(GameManager.PowerColor(GameManager.PowerUp.Magnet), 0.18f);
+        }
+
+        if (_magnetRing != null)
+        {
+            if (_magnetRing.activeSelf != on) _magnetRing.SetActive(on);
+            if (on)
+            {
+                _magnetPhase += Time.deltaTime * 2.2f;
+                float s = 2.6f + Mathf.Sin(_magnetPhase) * 0.45f;
+                _magnetRing.transform.localScale = new Vector3(s, 0.03f, s);
+                _magnetRing.transform.Rotate(0f, 70f * Time.deltaTime, 0f, Space.Self);
             }
         }
     }
@@ -209,6 +242,7 @@ public class PlayerController : MonoBehaviour
         if (playing && !jetpack) HandleInput();
 
         UpdateShield(gm != null && gm.ActivePower == GameManager.PowerUp.Shield);
+        UpdateMagnet(gm != null && gm.ActivePower == GameManager.PowerUp.Magnet);
 
         if (_sliding)
         {
