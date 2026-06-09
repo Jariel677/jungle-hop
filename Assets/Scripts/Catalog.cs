@@ -33,6 +33,8 @@ public static class Catalog
             shirt = new Color(0.9f, 0.16f, 0.2f),   pants = new Color(0.1f, 0.1f, 0.12f),   skin = new Color(0.95f, 0.8f, 0.66f) },
         new CharacterDef { id = 4, name = "Mint",  cost = 2000,
             shirt = new Color(0.18f, 0.8f, 0.7f),   pants = new Color(0.9f, 0.9f, 0.93f),   skin = new Color(0.6f, 0.45f, 0.36f) },
+        new CharacterDef { id = 5, name = "Pixel", cost = 3500,
+            shirt = new Color(0.62f, 0.3f, 0.95f),  pants = new Color(0.12f, 0.13f, 0.22f), skin = new Color(0.9f, 0.74f, 0.6f) },
     };
 
     public static readonly BoardDef[] Boards =
@@ -45,6 +47,10 @@ public static class Catalog
             deck = new Color(0.2f, 0.7f, 0.95f),   trim = new Color(0.95f, 0.96f, 1f) },
         new BoardDef { id = 3, name = "Magma",   cost = 1500,
             deck = new Color(0.95f, 0.35f, 0.1f),  trim = new Color(0.14f, 0.14f, 0.15f) },
+        new BoardDef { id = 4, name = "Aurora",  cost = 2400,
+            deck = new Color(0.35f, 0.9f, 0.6f),   trim = new Color(0.6f, 0.45f, 0.95f) },
+        new BoardDef { id = 5, name = "Phantom", cost = 4000,
+            deck = new Color(0.16f, 0.17f, 0.22f), trim = new Color(0.55f, 0.85f, 1f) },
     };
 
     public static CharacterDef Character(int id)

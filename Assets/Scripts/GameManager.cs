@@ -37,6 +37,7 @@ public class GameManager : MonoBehaviour
     float _comboTimer;
     float _nearMissFlash;
     public int BestCombo { get; private set; }
+    bool _newBest;
 
     public PlayerController Player { get; private set; }
     public WorldGenerator World { get; private set; }
@@ -321,7 +322,8 @@ public class GameManager : MonoBehaviour
         if (AudioManager.Instance != null) AudioManager.Instance.Crash();
 
         GameData.Coins += Coins;
-        if (Score > GameData.HighScore) GameData.HighScore = Score;
+        _newBest = Score > GameData.HighScore;
+        if (_newBest) GameData.HighScore = Score;
         Missions.ReportRun(Coins, Mathf.FloorToInt(Distance), RunPowerUps);
         GameData.Save();
     }
@@ -432,6 +434,14 @@ public class GameManager : MonoBehaviour
             GUI.DrawTexture(p, _panel);
 
             GUI.Label(new Rect(p.x, p.y + ph * 0.07f, pw, ph * 0.15f), "RUN OVER", _big);
+            if (_newBest)
+            {
+                Color prevC = _mid.normal.textColor;
+                float pulse = 0.7f + 0.3f * Mathf.Sin(Time.unscaledTime * 6f);
+                _mid.normal.textColor = new Color(1f, 0.85f * pulse + 0.15f, 0.25f);
+                GUI.Label(new Rect(p.x, p.y + ph * 0.20f, pw, ph * 0.07f), "★  NEW BEST!  ★", _mid);
+                _mid.normal.textColor = prevC;
+            }
             GUI.Label(new Rect(p.x, p.y + ph * 0.27f, pw, ph * 0.09f), "Score   " + Score, _mid);
             GUI.Label(new Rect(p.x, p.y + ph * 0.37f, pw, ph * 0.09f), "Coins this run   " + Coins, _mid);
             GUI.Label(new Rect(p.x, p.y + ph * 0.47f, pw, ph * 0.09f), "Total coins   " + GameData.Coins, _mid);

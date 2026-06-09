@@ -11,6 +11,7 @@ public class MenuUI : MonoBehaviour
 
     Page _page = Page.Home;
     int _shopTab;
+    Vector2 _shopScroll;
     string _toast = "";
     float _toastTimer;
 
@@ -171,6 +172,7 @@ public class MenuUI : MonoBehaviour
         GUILayout.EndHorizontal();
         GUILayout.Space(Screen.height * 0.014f);
 
+        _shopScroll = GUILayout.BeginScrollView(_shopScroll);
         if (_shopTab == 0)
         {
             foreach (CharacterDef c in Catalog.Characters)
@@ -191,8 +193,9 @@ public class MenuUI : MonoBehaviour
                 else if (r == 2) EquipBoard(b);
             }
         }
+        GUILayout.EndScrollView();
 
-        GUILayout.FlexibleSpace();
+        GUILayout.Space(Screen.height * 0.01f);
         if (GUILayout.Button("BACK", _btn, GUILayout.Height(BtnH))) _page = Page.Home;
     }
 
