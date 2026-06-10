@@ -61,6 +61,7 @@ public class GameManager : MonoBehaviour
 
     PowerUp _power = PowerUp.None;
     float _powerTimer;
+    float _powerFull;
 
     public PowerUp ActivePower { get { return _powerTimer > 0f ? _power : PowerUp.None; } }
     public float PowerTimeLeft { get { return Mathf.Max(0f, _powerTimer); } }
@@ -349,6 +350,7 @@ public class GameManager : MonoBehaviour
             case PowerUp.Sneakers: _powerTimer = 8f; break;
             case PowerUp.Shield: _powerTimer = 10f; break;
         }
+        _powerFull = _powerTimer;
         if (Cam != null) Cam.Shake(0.12f);
         if (AudioManager.Instance != null) AudioManager.Instance.PowerUp();
     }
@@ -474,6 +476,15 @@ public class GameManager : MonoBehaviour
                 _power_.normal.textColor = PowerColor(ActivePower);
                 GUI.Label(pr, PowerName(ActivePower) + "   " + Mathf.CeilToInt(PowerTimeLeft) + "s", _power_);
                 _power_.normal.textColor = prev;
+
+                float frac = _powerFull > 0f ? Mathf.Clamp01(PowerTimeLeft / _powerFull) : 0f;
+                Rect bar = new Rect(pr.x + pr.width * 0.1f, pr.y + pr.height * 0.84f,
+                                    pr.width * 0.8f, pr.height * 0.12f);
+                GUI.DrawTexture(bar, _pill);
+                Color pc = GUI.color;
+                GUI.color = PowerColor(ActivePower);
+                GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * frac, bar.height), Texture2D.whiteTexture);
+                GUI.color = pc;
             }
 
             if (CurrentState == State.Playing && !_paused && _flash > 0f && _flashText.Length > 0)
