@@ -48,6 +48,7 @@ public class GameManager : MonoBehaviour
 
     Light _sun;
     Material _sky;
+    Material _starMat;
 
     void Flash(string text, Color color)
     {
@@ -175,6 +176,7 @@ public class GameManager : MonoBehaviour
         Cam = camGo.AddComponent<CameraRig>();
         Cam.target = playerGo.transform;
         SetupPostFX(camGo);
+        CreateStars(camGo.transform);
 
         GameObject worldGo = new GameObject("World");
         worldGo.transform.SetParent(transform);
@@ -183,6 +185,26 @@ public class GameManager : MonoBehaviour
 
         gameObject.AddComponent<AudioManager>();
         gameObject.AddComponent<MenuUI>();
+    }
+
+    /// <summary>Scatters faint star dots on the sky dome (camera-attached); they fade in at night.</summary>
+    void CreateStars(Transform cam)
+    {
+        Shader sh = Shader.Find("Sprites/Default");
+        if (sh == null) return;
+        _starMat = new Material(sh);
+        _starMat.color = new Color(1f, 1f, 1f, 0f);   // invisible by day
+
+        GameObject root = new GameObject("Stars");
+        root.transform.SetParent(cam, false);
+        for (int i = 0; i < 70; i++)
+        {
+            Vector3 dir = new Vector3(Random.Range(-1f, 1f), Random.Range(0.2f, 1f),
+                                      Random.Range(-0.1f, 1f)).normalized;
+            float s = Random.Range(0.4f, 0.95f);
+            Art.Solid(PrimitiveType.Sphere, root.transform, dir * 135f,
+                      new Vector3(s, s, s), _starMat, "Star");
+        }
     }
 
     void SetupPostFX(GameObject camGo)
@@ -282,6 +304,12 @@ public class GameManager : MonoBehaviour
             _sky.SetColor("_SkyTint", Color.Lerp(
                 new Color(0.48f, 0.6f, 0.82f), new Color(0.12f, 0.13f, 0.26f), blend));
             _sky.SetFloat("_Exposure", Mathf.Lerp(1.3f, 0.4f, blend));
+        }
+        if (_starMat != null)
+        {
+            Color sc = _starMat.color;
+            sc.a = Mathf.Clamp01((blend - 0.35f) / 0.65f) * 0.9f;   // appear from dusk on
+            _starMat.color = sc;
         }
     }
 
@@ -541,7 +569,8 @@ public class GameManager : MonoBehaviour
                 GUI.Label(new Rect(p.x, p.y + ph * 0.20f, pw, ph * 0.07f), "★  NEW BEST!  ★", _mid);
                 _mid.normal.textColor = prevC;
             }
-            GUI.Label(new Rect(p.x, p.y + ph * 0.27f, pw, ph * 0.09f), "Score   " + Score, _mid);
+            GUI.Label(new Rect(p.x, p.y + ph * 0.27f, pw, ph * 0.09f),
+                      "Score   " + Score + "        " + Mathf.FloorToInt(Distance) + " m", _mid);
             GUI.Label(new Rect(p.x, p.y + ph * 0.37f, pw, ph * 0.09f), "Coins this run   " + Coins, _mid);
             GUI.Label(new Rect(p.x, p.y + ph * 0.47f, pw, ph * 0.09f), "Total coins   " + GameData.Coins, _mid);
             GUI.Label(new Rect(p.x, p.y + ph * 0.57f, pw, ph * 0.09f), "Best   " + GameData.HighScore, _mid);
