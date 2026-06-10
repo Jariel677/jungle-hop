@@ -16,6 +16,7 @@ public class PlayerController : MonoBehaviour
     int _lane = 1;
     float _vy, _jumpOffset;
     bool _grounded = true, _sliding;
+    bool _doubleJumpReady;
     float _slideTimer;
     float _halfHeight = 1f;
 
@@ -271,6 +272,7 @@ public class PlayerController : MonoBehaviour
                 _vy = 0f;
                 if (wasAir && playing) { Effects.DustPuff(FeetPos()); _landSquash = 1f; }
                 _grounded = true;
+                _doubleJumpReady = false;
             }
             else
             {
@@ -374,15 +376,33 @@ public class PlayerController : MonoBehaviour
 
     void Jump()
     {
-        if (!_grounded || _sliding) return;
+        if (_sliding) return;
         bool sneakers = GameManager.Instance != null
                         && GameManager.Instance.ActivePower == GameManager.PowerUp.Sneakers;
-        _vy = JumpVelocity * (sneakers ? 1.45f : 1f);
-        _grounded = false;
-        Effects.DustPuff(FeetPos());
+
+        if (_grounded)
+        {
+            _vy = JumpVelocity * (sneakers ? 1.45f : 1f);
+            _grounded = false;
+            _doubleJumpReady = sneakers;   // Super Sneakers grants a mid-air second jump
+            Effects.DustPuff(FeetPos());
+            Punch(3.5f);
+            if (AudioManager.Instance != null) AudioManager.Instance.Jump();
+        }
+        else if (_doubleJumpReady)
+        {
+            _doubleJumpReady = false;
+            _vy = JumpVelocity * 1.2f;
+            Effects.DustPuff(transform.position);
+            Punch(3f);
+            if (AudioManager.Instance != null) AudioManager.Instance.Jump();
+        }
+    }
+
+    void Punch(float amount)
+    {
         if (GameManager.Instance != null && GameManager.Instance.Cam != null)
-            GameManager.Instance.Cam.Punch(3.5f);
-        if (AudioManager.Instance != null) AudioManager.Instance.Jump();
+            GameManager.Instance.Cam.Punch(amount);
     }
 
     void Slide()
