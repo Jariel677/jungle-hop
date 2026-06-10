@@ -38,6 +38,7 @@ public class WorldGenerator : MonoBehaviour
     Material _track, _sleeper, _line, _curb;
     Material[] _building;
     Material _window, _pole, _lamp;
+    Color _windowEmissionBase, _lampEmissionBase;
     Material _barrier, _stripe, _train, _trainTrim, _trainWin, _gate, _sign;
     Material _coinMat, _powerCore;
     Material[] _powerMat;
@@ -106,9 +107,11 @@ public class WorldGenerator : MonoBehaviour
             Art.Mat(new Color(0.6f, 0.46f, 0.41f), 0f, 0.2f),
             Art.Mat(new Color(0.47f, 0.5f, 0.47f), 0f, 0.25f),
         };
-        _window = Art.Glow(new Color(0.55f, 0.7f, 0.82f), new Color(0.33f, 0.45f, 0.55f), 0.65f);
+        _windowEmissionBase = new Color(0.33f, 0.45f, 0.55f);
+        _window = Art.Glow(new Color(0.55f, 0.7f, 0.82f), _windowEmissionBase, 0.65f);
         _pole = Art.Mat(new Color(0.24f, 0.25f, 0.29f), 0.6f, 0.5f);
-        _lamp = Art.Glow(new Color(1f, 0.95f, 0.72f), new Color(1f, 0.86f, 0.45f), 0.7f);
+        _lampEmissionBase = new Color(1f, 0.86f, 0.45f);
+        _lamp = Art.Glow(new Color(1f, 0.95f, 0.72f), _lampEmissionBase, 0.7f);
 
         _barrier = Art.Mat(new Color(0.96f, 0.73f, 0.1f), 0f, 0.35f);
         _stripe = Art.Mat(new Color(0.13f, 0.13f, 0.14f), 0f, 0.3f);
@@ -158,6 +161,13 @@ public class WorldGenerator : MonoBehaviour
         CullAndAnimate(pz);
 
         GameManager gm = GameManager.Instance;
+        if (gm != null)
+        {
+            // City lights respond to the day/night cycle (matches the atmosphere blend).
+            float blend = Mathf.PingPong(gm.Distance / 1300f, 1f);
+            if (_lamp != null) _lamp.SetColor("_EmissionColor", _lampEmissionBase * (0.55f + blend * 1.7f));
+            if (_window != null) _window.SetColor("_EmissionColor", _windowEmissionBase * (0.7f + blend * 1.9f));
+        }
         if (gm == null || gm.CurrentState != GameManager.State.Playing) return;
 
         Vector3 playerPos = player.transform.position;
