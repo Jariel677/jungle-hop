@@ -236,6 +236,10 @@ public class GameManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.P))
             TogglePause();
 
+        if (CurrentState == State.GameOver &&
+            (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.R)))
+            PlayAgain();
+
         if (CurrentState == State.Playing && !_paused)
         {
             Speed = Mathf.Min(MaxSpeed, Speed + Acceleration * Time.deltaTime);
@@ -563,10 +567,12 @@ public class GameManager : MonoBehaviour
             GUI.Label(new Rect(p.x, p.y + ph * 0.33f, pw, ph * 0.12f),
                       "Score   " + Score, _mid);
 
-            float bw = pw * 0.62f, bh = ph * 0.17f;
-            if (GUI.Button(new Rect(p.x + (pw - bw) * 0.5f, p.y + ph * 0.52f, bw, bh), "RESUME", _btn))
+            float bw = pw * 0.62f, bh = ph * 0.145f;
+            if (GUI.Button(new Rect(p.x + (pw - bw) * 0.5f, p.y + ph * 0.46f, bw, bh), "RESUME", _btn))
                 Resume();
-            if (GUI.Button(new Rect(p.x + (pw - bw) * 0.5f, p.y + ph * 0.73f, bw, bh), "HOME", _btn))
+            if (GUI.Button(new Rect(p.x + (pw - bw) * 0.5f, p.y + ph * 0.64f, bw, bh), "RESTART", _btn))
+                PlayAgain();
+            if (GUI.Button(new Rect(p.x + (pw - bw) * 0.5f, p.y + ph * 0.82f, bw, bh), "HOME", _btn))
                 Restart();
         }
     }
