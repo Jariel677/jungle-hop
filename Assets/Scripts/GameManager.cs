@@ -506,7 +506,7 @@ public class GameManager : MonoBehaviour
         if (CurrentState == State.Playing || CurrentState == State.GameOver)
         {
             GUI.Label(new Rect(pad, pad, Screen.width * 0.6f, Screen.height * 0.1f),
-                      "SCORE  " + Score, _hud);
+                      "SCORE  " + Score.ToString("N0"), _hud);
             int sub0 = _sub.fontSize;
             if (_coinPulse > 0f)
                 _sub.fontSize = Mathf.RoundToInt(sub0 * (1f + Mathf.Clamp01(_coinPulse) * 0.4f));
@@ -516,7 +516,7 @@ public class GameManager : MonoBehaviour
             float pauseBtn = Screen.height * 0.07f;
             GUI.Label(new Rect(Screen.width * 0.35f, pad, Screen.width * 0.65f - pad * 2f - pauseBtn,
                                Screen.height * 0.1f),
-                      "BEST  " + GameData.HighScore, _hudRight);
+                      "BEST  " + GameData.HighScore.ToString("N0"), _hudRight);
 
             if (CurrentState == State.Playing && !_paused &&
                 GUI.Button(new Rect(Screen.width - pad - pauseBtn, pad, pauseBtn, pauseBtn), "II", _btn))
@@ -584,10 +584,10 @@ public class GameManager : MonoBehaviour
                 _mid.normal.textColor = prevC;
             }
             GUI.Label(new Rect(p.x, p.y + ph * 0.27f, pw, ph * 0.09f),
-                      "Score   " + Score + "        " + Mathf.FloorToInt(Distance) + " m", _mid);
+                      "Score   " + Score.ToString("N0") + "        " + Mathf.FloorToInt(Distance) + " m", _mid);
             GUI.Label(new Rect(p.x, p.y + ph * 0.37f, pw, ph * 0.09f), "Coins this run   " + Coins, _mid);
-            GUI.Label(new Rect(p.x, p.y + ph * 0.47f, pw, ph * 0.09f), "Total coins   " + GameData.Coins, _mid);
-            GUI.Label(new Rect(p.x, p.y + ph * 0.57f, pw, ph * 0.09f), "Best   " + GameData.HighScore, _mid);
+            GUI.Label(new Rect(p.x, p.y + ph * 0.47f, pw, ph * 0.09f), "Total coins   " + GameData.Coins.ToString("N0"), _mid);
+            GUI.Label(new Rect(p.x, p.y + ph * 0.57f, pw, ph * 0.09f), "Best   " + GameData.HighScore.ToString("N0"), _mid);
             if (BestCombo > 1)
             {
                 Color prevC = _mid.normal.textColor;
