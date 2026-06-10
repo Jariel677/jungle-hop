@@ -18,6 +18,12 @@ public static class GameData
         set { PlayerPrefs.SetInt("subway_highscore", value); }
     }
 
+    public static int BestCombo
+    {
+        get { return PlayerPrefs.GetInt("gd_best_combo", 0); }
+        set { PlayerPrefs.SetInt("gd_best_combo", value); }
+    }
+
     public static int EquippedCharacter
     {
         get { return PlayerPrefs.GetInt("gd_char", 0); }

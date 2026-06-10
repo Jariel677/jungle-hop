@@ -123,6 +123,8 @@ public class MenuUI : MonoBehaviour
         GUILayout.Space(Screen.height * 0.015f);
         GUILayout.Label("SUBWAY RUNNER", _title);
         GUILayout.Label("◆  " + GameData.Coins + "      Best  " + GameData.HighScore, _coin);
+        if (GameData.BestCombo > 1)
+            GUILayout.Label("Best dodge combo  x" + GameData.BestCombo, _body);
         GUILayout.Space(Screen.height * 0.03f);
 
         if (GUILayout.Button("PLAY", _btnBig, GUILayout.Height(Screen.height * 0.12f)))

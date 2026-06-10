@@ -364,6 +364,7 @@ public class GameManager : MonoBehaviour
         GameData.Coins += Coins;
         _newBest = Score > GameData.HighScore;
         if (_newBest) GameData.HighScore = Score;
+        if (BestCombo > GameData.BestCombo) GameData.BestCombo = BestCombo;
         Missions.ReportRun(Coins, Mathf.FloorToInt(Distance), RunPowerUps);
         GameData.SeenTutorial = true;
         GameData.Save();
