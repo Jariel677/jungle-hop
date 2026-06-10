@@ -183,6 +183,7 @@ public class GameManager : MonoBehaviour
         cam.backgroundColor = new Color(0.52f, 0.74f, 0.96f);
         cam.fieldOfView = 68f;
         cam.farClipPlane = 240f;
+        camGo.AddComponent<AudioListener>();   // without this there is no sound
         Cam = camGo.AddComponent<CameraRig>();
         Cam.target = playerGo.transform;
         SetupPostFX(camGo);
