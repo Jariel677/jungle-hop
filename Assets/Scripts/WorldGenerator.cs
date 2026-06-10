@@ -180,6 +180,13 @@ public class WorldGenerator : MonoBehaviour
                 if (Mathf.Abs(ct.position.z - playerPos.z) < 16f)
                     ct.position = Vector3.MoveTowards(ct.position, playerPos, 17f * Time.deltaTime);
             }
+            for (int i = 0; i < _powers.Count; i++)
+            {
+                if (_powers[i].go == null) continue;
+                Transform wt = _powers[i].go.transform;
+                if (Mathf.Abs(wt.position.z - playerPos.z) < 14f)
+                    wt.position = Vector3.MoveTowards(wt.position, playerPos, 14f * Time.deltaTime);
+            }
         }
 
         Bounds pb = player.CollisionBounds;
