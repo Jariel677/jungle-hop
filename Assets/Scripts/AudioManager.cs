@@ -135,8 +135,8 @@ public class AudioManager : MonoBehaviour
         Play(_coin, 0.5f, _coinPitch);
     }
 
-    public void Jump() { Play(_jump, 0.45f, 1f); }
-    public void Slide() { Play(_slide, 0.5f, 1f); }
+    public void Jump() { Play(_jump, 0.45f, Random.Range(0.95f, 1.08f)); }
+    public void Slide() { Play(_slide, 0.5f, Random.Range(0.95f, 1.05f)); }
     public void Crash() { Play(_crash, 0.95f, 0.9f); }
     public void PowerUp() { Play(_powerup, 0.8f, 1f); }
     public void Click() { Play(_click, 0.55f, 1f); }
