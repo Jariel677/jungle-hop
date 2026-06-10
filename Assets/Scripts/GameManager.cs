@@ -45,6 +45,8 @@ public class GameManager : MonoBehaviour
     Color _flashColor = Color.white;
     int _nextMilestone = 500;
 
+    Light _sun;
+
     void Flash(string text, Color color)
     {
         _flash = 1f;
@@ -122,6 +124,7 @@ public class GameManager : MonoBehaviour
         light.shadows = LightShadows.Soft;
         sun.transform.rotation = Quaternion.Euler(44f, 32f, 0f);
         RenderSettings.sun = light;
+        _sun = light;
 
         GameObject fill = new GameObject("Fill Light");
         fill.transform.SetParent(transform);
@@ -226,6 +229,8 @@ public class GameManager : MonoBehaviour
         if (_coinPulse > 0f) _coinPulse -= Time.unscaledDeltaTime * 3.2f;
         if (_flash > 0f) _flash -= Time.unscaledDeltaTime * 1.5f;
 
+        UpdateAtmosphere();
+
         if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.P))
             TogglePause();
 
@@ -247,6 +252,22 @@ public class GameManager : MonoBehaviour
                 _nextMilestone += 500;
             }
         }
+    }
+
+    /// <summary>Drifts sky/fog/light between day, dusk and night as distance climbs.</summary>
+    void UpdateAtmosphere()
+    {
+        if (_sun == null) return;
+        float blend = Mathf.PingPong(Distance / 1300f, 1f);   // 0 = day, 1 = night
+        RenderSettings.fogColor = Color.Lerp(
+            new Color(0.64f, 0.72f, 0.84f), new Color(0.17f, 0.20f, 0.33f), blend);
+        RenderSettings.ambientSkyColor = Color.Lerp(
+            new Color(0.70f, 0.76f, 0.86f), new Color(0.22f, 0.26f, 0.40f), blend);
+        RenderSettings.ambientEquatorColor = Color.Lerp(
+            new Color(0.50f, 0.52f, 0.55f), new Color(0.18f, 0.20f, 0.28f), blend);
+        _sun.intensity = Mathf.Lerp(1.3f, 0.5f, blend);
+        _sun.color = Color.Lerp(
+            new Color(1f, 0.96f, 0.87f), new Color(0.55f, 0.66f, 1f), blend);
     }
 
     /// <summary>Awards a near-miss: builds the dodge combo and grants escalating bonus points.</summary>
