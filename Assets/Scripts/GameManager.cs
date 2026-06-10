@@ -71,6 +71,8 @@ public class GameManager : MonoBehaviour
 
     float _hitStopTimer;
     float _coinPulse;
+    float _powerFlash;
+    Color _powerFlashColor = Color.white;
     bool _paused;
 
     public bool IsPaused { get { return _paused; } }
@@ -254,6 +256,7 @@ public class GameManager : MonoBehaviour
         }
         if (_coinPulse > 0f) _coinPulse -= Time.unscaledDeltaTime * 3.2f;
         if (_flash > 0f) _flash -= Time.unscaledDeltaTime * 1.5f;
+        if (_powerFlash > 0f) _powerFlash -= Time.unscaledDeltaTime * 2f;
 
         UpdateAtmosphere();
 
@@ -392,6 +395,8 @@ public class GameManager : MonoBehaviour
             case PowerUp.Shield: _powerTimer = 10f; break;
         }
         _powerFull = _powerTimer;
+        _powerFlash = 1f;
+        _powerFlashColor = PowerColor(p);
         if (Cam != null) Cam.Shake(0.12f);
         if (AudioManager.Instance != null) AudioManager.Instance.PowerUp();
     }
@@ -488,6 +493,15 @@ public class GameManager : MonoBehaviour
     {
         if (!_uiReady) InitUI();
         float pad = Screen.height * 0.03f;
+
+        if (_powerFlash > 0f)
+        {
+            Color pcol = GUI.color;
+            GUI.color = new Color(_powerFlashColor.r, _powerFlashColor.g, _powerFlashColor.b,
+                                  Mathf.Clamp01(_powerFlash) * 0.22f);
+            GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), Texture2D.whiteTexture);
+            GUI.color = pcol;
+        }
 
         if (CurrentState == State.Playing || CurrentState == State.GameOver)
         {
