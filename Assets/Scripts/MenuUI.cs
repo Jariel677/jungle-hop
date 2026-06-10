@@ -151,7 +151,8 @@ public class MenuUI : MonoBehaviour
         }
         else
         {
-            GUILayout.Label("Daily reward claimed — back tomorrow", _body);
+            string streak = GameData.DailyStreak > 1 ? "  (streak " + GameData.DailyStreak + ")" : "";
+            GUILayout.Label("Daily reward claimed — back tomorrow" + streak, _body);
         }
 
         GUILayout.FlexibleSpace();

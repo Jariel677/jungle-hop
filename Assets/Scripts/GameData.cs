@@ -93,6 +93,11 @@ public static class GameData
         get { return PlayerPrefs.GetInt("gd_daily_day", -1) != Today(); }
     }
 
+    public static int DailyStreak
+    {
+        get { return PlayerPrefs.GetInt("gd_daily_streak", 0); }
+    }
+
     /// <summary>Claims the daily reward and returns the coin amount granted.</summary>
     public static int ClaimDaily()
     {
