@@ -15,11 +15,19 @@ public class CameraRig : MonoBehaviour
 
     Camera _cam;
     float _shake;
+    float _fovKick;
+    float _smoothFov = BaseFov;
 
     /// <summary>Adds an impact shake (decays automatically).</summary>
     public void Shake(float amount)
     {
         if (amount > _shake) _shake = amount;
+    }
+
+    /// <summary>Briefly widens the field of view (decays automatically) for a speed kick.</summary>
+    public void Punch(float amount)
+    {
+        if (amount > _fovKick) _fovKick = amount;
     }
 
     void Start()
@@ -51,8 +59,10 @@ public class CameraRig : MonoBehaviour
         if (_cam != null)
         {
             float speed = GameManager.Instance != null ? GameManager.Instance.CurrentSpeed : 0f;
-            float targetFov = BaseFov + Mathf.Clamp(speed - 9f, 0f, 18f) * 0.85f;
-            _cam.fieldOfView = Mathf.Lerp(_cam.fieldOfView, targetFov, 3f * Time.deltaTime);
+            float baseFov = BaseFov + Mathf.Clamp(speed - 9f, 0f, 18f) * 0.85f;
+            _smoothFov = Mathf.Lerp(_smoothFov, baseFov, 3f * Time.deltaTime);
+            _fovKick = Mathf.Lerp(_fovKick, 0f, 5f * Time.deltaTime);
+            _cam.fieldOfView = _smoothFov + _fovKick;
         }
     }
 }

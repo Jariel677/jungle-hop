@@ -380,6 +380,8 @@ public class PlayerController : MonoBehaviour
         _vy = JumpVelocity * (sneakers ? 1.45f : 1f);
         _grounded = false;
         Effects.DustPuff(FeetPos());
+        if (GameManager.Instance != null && GameManager.Instance.Cam != null)
+            GameManager.Instance.Cam.Punch(3.5f);
         if (AudioManager.Instance != null) AudioManager.Instance.Jump();
     }
 
@@ -398,6 +400,8 @@ public class PlayerController : MonoBehaviour
         _vy = velocity;
         _grounded = false;
         Effects.DustPuff(FeetPos());
+        if (GameManager.Instance != null && GameManager.Instance.Cam != null)
+            GameManager.Instance.Cam.Punch(6.5f);
         if (AudioManager.Instance != null) AudioManager.Instance.Jump();
     }
 }
