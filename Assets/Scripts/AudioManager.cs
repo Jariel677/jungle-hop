@@ -58,21 +58,24 @@ public class AudioManager : MonoBehaviour
     AudioClip BuildMusic()
     {
         const int sr = 44100;
-        const int steps = 32;        // 16th notes
-        const int stepLen = 5512;    // ~0.125 s/step -> ~120 BPM, ~4 s loop
+        const int steps = 64;        // 16th notes
+        const int stepLen = 5512;    // ~0.125 s/step -> ~120 BPM, ~8 s loop
         int total = steps * stepLen;
         float[] buf = new float[total];
 
         // A-minor pentatonic across two octaves: A C D E G ...
         float[] scale = { 220f, 261.63f, 293.66f, 329.63f, 392f,
                           440f, 523.25f, 587.33f, 659.25f, 783.99f };
-        // -1 = rest; values index into scale.
+        // -1 = rest; values index into scale. Two phrases (A then a higher B).
         int[] melody =
         {
             5, -1, 7, 5,  4, -1, 5, -1,  3, -1, 4, 3,  1, -1, 3, -1,
             5, -1, 8, 7,  6, -1, 5, -1,  4, -1, 3, 4,  5, -1, -1, -1,
+            7, -1, 8, 7,  6, -1, 7, -1,  5, -1, 6, 5,  3, -1, 5, -1,
+            8, -1, 9, 8,  7, -1, 6, -1,  5, -1, 4, 5,  7, -1, 5, -1,
         };
-        float[] bass = { 110f, 110f, 146.83f, 130.81f };  // one per 8 steps
+        // one per 8 steps (eight groups across the two phrases)
+        float[] bass = { 110f, 110f, 146.83f, 130.81f, 110f, 164.81f, 146.83f, 130.81f };
 
         for (int s = 0; s < steps; s++)
         {
