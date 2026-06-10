@@ -27,6 +27,7 @@ public class WorldGenerator : MonoBehaviour
     readonly List<Transform> _tiles = new List<Transform>();
     readonly List<Hazard> _hazards = new List<Hazard>();
     readonly List<Pickup> _coins = new List<Pickup>();
+    readonly Stack<GameObject> _coinPool = new Stack<GameObject>();
     readonly List<Power> _powers = new List<Power>();
     readonly List<Ramp> _ramps = new List<Ramp>();
     readonly List<GameObject> _props = new List<GameObject>();
@@ -202,7 +203,7 @@ public class WorldGenerator : MonoBehaviour
             {
                 gm.AddCoin();
                 Effects.CoinSparkle(cg.transform.position);
-                Destroy(cg);
+                ReturnCoin(cg);
                 _coins.RemoveAt(i);
             }
         }
@@ -603,17 +604,38 @@ public class WorldGenerator : MonoBehaviour
 
     void SpawnCoin(int lane, float z, float y)
     {
+        GameObject go = GetCoin();
+        go.transform.position = new Vector3(GameManager.LaneX[lane], y, z);
+        go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        _coins.Add(new Pickup { go = go, baseY = y });
+    }
+
+    /// <summary>Reuses a pooled coin or builds a fresh one (collider-free cylinder).</summary>
+    GameObject GetCoin()
+    {
+        if (_coinPool.Count > 0)
+        {
+            GameObject pooled = _coinPool.Pop();
+            pooled.SetActive(true);
+            return pooled;
+        }
         GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         go.name = "Coin";
         Collider col = go.GetComponent<Collider>();
         if (col != null) Destroy(col);
         go.transform.SetParent(transform);
         go.transform.localScale = new Vector3(0.62f, 0.07f, 0.62f);
-        go.transform.position = new Vector3(GameManager.LaneX[lane], y, z);
-        go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
         Renderer r = go.GetComponent<Renderer>();
         if (r != null) r.sharedMaterial = _coinMat;
-        _coins.Add(new Pickup { go = go, baseY = y });
+        return go;
+    }
+
+    /// <summary>Deactivates a coin and returns it to the pool for reuse.</summary>
+    void ReturnCoin(GameObject go)
+    {
+        if (go == null) return;
+        go.SetActive(false);
+        _coinPool.Push(go);
     }
 
     /// <summary>A launch ramp: running into it flings the player up into a coin arc.</summary>
@@ -705,7 +727,7 @@ public class WorldGenerator : MonoBehaviour
             Transform ct = _coins[i].go.transform;
             if (ct.position.z < pz - DespawnBehind)
             {
-                Destroy(_coins[i].go);
+                ReturnCoin(_coins[i].go);
                 _coins.RemoveAt(i);
                 continue;
             }
