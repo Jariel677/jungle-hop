@@ -331,6 +331,14 @@ public class MenuUI : MonoBehaviour
         }
 
         GUILayout.Space(Screen.height * 0.012f);
+        if (GUILayout.Button("Sound Effects:   " + (GameData.Sfx ? "ON" : "OFF"),
+                             _btn, GUILayout.Height(BtnH)))
+        {
+            GameData.Sfx = !GameData.Sfx;
+            GameData.Save();
+        }
+
+        GUILayout.Space(Screen.height * 0.012f);
         if (GUILayout.Button("Hazard Cues:   " + (GameData.HighContrast ? "ON" : "OFF"),
                              _btn, GUILayout.Height(BtnH)))
         {

@@ -295,6 +295,18 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // Auto-pause when the app is backgrounded or loses focus, so a run never
+    // continues unattended. Resume stays manual (via the pause overlay).
+    void OnApplicationFocus(bool focus)
+    {
+        if (!focus && CurrentState == State.Playing && !_paused) Pause();
+    }
+
+    void OnApplicationPause(bool paused)
+    {
+        if (paused && CurrentState == State.Playing && !_paused) Pause();
+    }
+
     public void AddCoin()
     {
         Coins += Multiplier;

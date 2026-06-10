@@ -120,7 +120,7 @@ public class AudioManager : MonoBehaviour
 
     void Play(AudioClip clip, float volume, float pitch)
     {
-        if (clip == null || _sfx == null) return;
+        if (clip == null || _sfx == null || !GameData.Sfx) return;
         _sfx.pitch = pitch;
         _sfx.PlayOneShot(clip, volume);
     }

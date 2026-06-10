@@ -63,6 +63,12 @@ public static class GameData
         set { PlayerPrefs.SetInt("gd_set_music", value ? 1 : 0); }
     }
 
+    public static bool Sfx
+    {
+        get { return PlayerPrefs.GetInt("gd_set_sfx", 1) == 1; }
+        set { PlayerPrefs.SetInt("gd_set_sfx", value ? 1 : 0); }
+    }
+
     public static bool SeenTutorial
     {
         get { return PlayerPrefs.GetInt("gd_seen_tut", 0) == 1; }
