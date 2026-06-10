@@ -47,6 +47,7 @@ public class GameManager : MonoBehaviour
     int _nextMilestone = 500;
 
     Light _sun;
+    Material _sky;
 
     void Flash(string text, Color color)
     {
@@ -147,6 +148,7 @@ public class GameManager : MonoBehaviour
             sky.SetFloat("_SunSize", 0.05f);
             sky.SetFloat("_Exposure", 1.3f);
             RenderSettings.skybox = sky;
+            _sky = sky;
         }
 
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
@@ -274,6 +276,13 @@ public class GameManager : MonoBehaviour
         _sun.intensity = Mathf.Lerp(1.3f, 0.5f, blend);
         _sun.color = Color.Lerp(
             new Color(1f, 0.96f, 0.87f), new Color(0.55f, 0.66f, 1f), blend);
+
+        if (_sky != null)
+        {
+            _sky.SetColor("_SkyTint", Color.Lerp(
+                new Color(0.48f, 0.6f, 0.82f), new Color(0.12f, 0.13f, 0.26f), blend));
+            _sky.SetFloat("_Exposure", Mathf.Lerp(1.3f, 0.4f, blend));
+        }
     }
 
     /// <summary>Awards a near-miss: builds the dodge combo and grants escalating bonus points.</summary>
