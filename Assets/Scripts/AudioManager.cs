@@ -29,9 +29,15 @@ public class AudioManager : MonoBehaviour
         _music = gameObject.AddComponent<AudioSource>();
         _music.playOnAwake = false;
         _music.loop = true;
-        _music.volume = 0.3f;
+        _music.volume = GameData.MusicVolume;
         _music.clip = BuildMusic();
         if (GameData.Music) _music.Play();
+    }
+
+    /// <summary>Re-applies the saved music volume to the live source.</summary>
+    public void RefreshMusicVolume()
+    {
+        if (_music != null) _music.volume = GameData.MusicVolume;
     }
 
     /// <summary>Starts or stops the looping background track and remembers the choice.</summary>
@@ -125,7 +131,7 @@ public class AudioManager : MonoBehaviour
     {
         if (clip == null || _sfx == null || !GameData.Sfx) return;
         _sfx.pitch = pitch;
-        _sfx.PlayOneShot(clip, volume);
+        _sfx.PlayOneShot(clip, volume * GameData.SfxVolume);
     }
 
     public void Coin()

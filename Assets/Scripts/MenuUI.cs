@@ -332,6 +332,12 @@ public class MenuUI : MonoBehaviour
             GameData.Save();
             if (AudioManager.Instance != null) AudioManager.Instance.SetMusic(GameData.Music);
         }
+        float mv = GUILayout.HorizontalSlider(GameData.MusicVolume, 0f, 1f);
+        if (Mathf.Abs(mv - GameData.MusicVolume) > 0.001f)
+        {
+            GameData.MusicVolume = mv;
+            if (AudioManager.Instance != null) AudioManager.Instance.RefreshMusicVolume();
+        }
 
         GUILayout.Space(Screen.height * 0.012f);
         if (GUILayout.Button("Sound Effects:   " + (GameData.Sfx ? "ON" : "OFF"),
@@ -340,6 +346,9 @@ public class MenuUI : MonoBehaviour
             GameData.Sfx = !GameData.Sfx;
             GameData.Save();
         }
+        float sv = GUILayout.HorizontalSlider(GameData.SfxVolume, 0f, 1f);
+        if (Mathf.Abs(sv - GameData.SfxVolume) > 0.001f) GameData.SfxVolume = sv;
+        if (Event.current.type == EventType.MouseUp) GameData.Save();
 
         GUILayout.Space(Screen.height * 0.012f);
         if (GUILayout.Button("Hazard Cues:   " + (GameData.HighContrast ? "ON" : "OFF"),

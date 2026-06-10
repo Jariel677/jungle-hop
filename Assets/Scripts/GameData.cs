@@ -75,6 +75,18 @@ public static class GameData
         set { PlayerPrefs.SetInt("gd_set_sfx", value ? 1 : 0); }
     }
 
+    public static float MusicVolume
+    {
+        get { return PlayerPrefs.GetFloat("gd_vol_music", 0.3f); }
+        set { PlayerPrefs.SetFloat("gd_vol_music", Mathf.Clamp01(value)); }
+    }
+
+    public static float SfxVolume
+    {
+        get { return PlayerPrefs.GetFloat("gd_vol_sfx", 1f); }
+        set { PlayerPrefs.SetFloat("gd_vol_sfx", Mathf.Clamp01(value)); }
+    }
+
     public static bool SeenTutorial
     {
         get { return PlayerPrefs.GetInt("gd_seen_tut", 0) == 1; }
