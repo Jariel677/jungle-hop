@@ -424,6 +424,7 @@ public class WorldGenerator : MonoBehaviour
         int kind = Random.value < 0.45f ? 0 : (Random.value < 0.72f ? 1 : 2);
 
         Vector3 size, center;
+        int trainCars = 1;
         if (kind == 0)
         {
             size = new Vector3(2.0f, 1.0f, 1.5f);
@@ -431,7 +432,12 @@ public class WorldGenerator : MonoBehaviour
         }
         else if (kind == 1)
         {
-            size = new Vector3(2.0f, 3.0f, 1.5f);
+            // Long, multi-car trains appear more often as the run gets harder:
+            // you must already be clear of the lane — no last-moment swerve.
+            GameManager gm = GameManager.Instance;
+            float diff = gm != null ? Mathf.Clamp01(gm.Distance / 2500f) : 0f;
+            if (Random.value < 0.3f + diff * 0.4f) trainCars = Random.Range(2, 4);
+            size = new Vector3(2.0f, 3.0f, 1.5f + (trainCars - 1) * 2.4f);
             center = new Vector3(GameManager.LaneX[lane], 1.5f, z);
         }
         else
@@ -445,7 +451,7 @@ public class WorldGenerator : MonoBehaviour
         go.transform.position = center;
 
         if (kind == 0) BuildBarrier(go.transform);
-        else if (kind == 1) BuildTrain(go.transform);
+        else if (kind == 1) BuildTrain(go.transform, trainCars);
         else BuildGate(go.transform);
 
         if (GameData.HighContrast)
@@ -516,24 +522,40 @@ public class WorldGenerator : MonoBehaviour
                       new Vector3(0.34f, 0.66f, 0.06f), _stripe, "Stripe");
     }
 
-    void BuildTrain(Transform p)
+    void BuildTrain(Transform p, int cars)
     {
-        Art.Solid(PrimitiveType.Cube, p, new Vector3(0f, -0.05f, 0f),
-                  new Vector3(1.9f, 2.5f, 1.4f), _train, "Body");
-        Art.Solid(PrimitiveType.Cube, p, new Vector3(0f, 1.32f, 0f),
-                  new Vector3(2.0f, 0.34f, 1.5f), _trainTrim, "Roof");
-        Art.Solid(PrimitiveType.Cube, p, new Vector3(0f, -1.32f, 0f),
-                  new Vector3(1.95f, 0.42f, 1.45f), _trainTrim, "Skirt");
-        Art.Solid(PrimitiveType.Cube, p, new Vector3(0f, 0.55f, -0.71f),
-                  new Vector3(1.45f, 0.62f, 0.06f), _trainWin, "WinFront");
-        Art.Solid(PrimitiveType.Cube, p, new Vector3(-0.96f, 0.55f, 0f),
-                  new Vector3(0.06f, 0.62f, 1.0f), _trainWin, "WinL");
-        Art.Solid(PrimitiveType.Cube, p, new Vector3(0.96f, 0.55f, 0f),
-                  new Vector3(0.06f, 0.62f, 1.0f), _trainWin, "WinR");
-        Art.Solid(PrimitiveType.Cube, p, new Vector3(-0.55f, -0.62f, -0.72f),
-                  new Vector3(0.24f, 0.24f, 0.06f), _lamp, "HeadL");
-        Art.Solid(PrimitiveType.Cube, p, new Vector3(0.55f, -0.62f, -0.72f),
-                  new Vector3(0.24f, 0.24f, 0.06f), _lamp, "HeadR");
+        if (cars < 1) cars = 1;
+        // Cars run along Z; the front car (nearest the player, lowest local Z)
+        // gets the windshield and headlights.
+        for (int c = 0; c < cars; c++)
+        {
+            float cz = (c - (cars - 1) * 0.5f) * 2.4f;
+            BuildTrainCar(p, cz, c == 0);
+        }
+    }
+
+    void BuildTrainCar(Transform p, float cz, bool front)
+    {
+        Art.Solid(PrimitiveType.Cube, p, new Vector3(0f, -0.05f, cz),
+                  new Vector3(1.9f, 2.5f, 2.2f), _train, "Body");
+        Art.Solid(PrimitiveType.Cube, p, new Vector3(0f, 1.32f, cz),
+                  new Vector3(2.0f, 0.34f, 2.3f), _trainTrim, "Roof");
+        Art.Solid(PrimitiveType.Cube, p, new Vector3(0f, -1.32f, cz),
+                  new Vector3(1.95f, 0.42f, 2.25f), _trainTrim, "Skirt");
+        Art.Solid(PrimitiveType.Cube, p, new Vector3(-0.96f, 0.55f, cz),
+                  new Vector3(0.06f, 0.62f, 1.5f), _trainWin, "WinL");
+        Art.Solid(PrimitiveType.Cube, p, new Vector3(0.96f, 0.55f, cz),
+                  new Vector3(0.06f, 0.62f, 1.5f), _trainWin, "WinR");
+
+        if (front)
+        {
+            Art.Solid(PrimitiveType.Cube, p, new Vector3(0f, 0.55f, cz - 1.11f),
+                      new Vector3(1.45f, 0.62f, 0.06f), _trainWin, "WinFront");
+            Art.Solid(PrimitiveType.Cube, p, new Vector3(-0.55f, -0.62f, cz - 1.12f),
+                      new Vector3(0.24f, 0.24f, 0.06f), _lamp, "HeadL");
+            Art.Solid(PrimitiveType.Cube, p, new Vector3(0.55f, -0.62f, cz - 1.12f),
+                      new Vector3(0.24f, 0.24f, 0.06f), _lamp, "HeadR");
+        }
     }
 
     void BuildGate(Transform p)
