@@ -21,6 +21,7 @@ public class PlayerController : MonoBehaviour
 
     Transform _rig, _torso, _armL, _armR, _legL, _legR;
     float _runPhase;
+    float _landSquash;
 
     GameObject _shieldBubble;
     GameObject _magnetRing;
@@ -249,6 +250,7 @@ public class PlayerController : MonoBehaviour
             _slideTimer -= Time.deltaTime;
             if (_slideTimer <= 0f) _sliding = false;
         }
+        if (_landSquash > 0f) _landSquash -= Time.deltaTime * 5f;
         _halfHeight = _sliding ? 0.5f : 1f;
 
         if (jetpack)
@@ -267,7 +269,7 @@ public class PlayerController : MonoBehaviour
             {
                 _jumpOffset = 0f;
                 _vy = 0f;
-                if (wasAir && playing) Effects.DustPuff(FeetPos());
+                if (wasAir && playing) { Effects.DustPuff(FeetPos()); _landSquash = 1f; }
                 _grounded = true;
             }
             else
@@ -294,7 +296,9 @@ public class PlayerController : MonoBehaviour
     {
         if (_rig == null) return;
 
-        _rig.localScale = new Vector3(1f, _halfHeight, 1f);
+        float sq = Mathf.Clamp01(_landSquash);
+        float sxz = 1f + 0.16f * sq;
+        _rig.localScale = new Vector3(sxz, _halfHeight * (1f - 0.2f * sq), sxz);
         _rig.localPosition = new Vector3(0f, -_halfHeight, 0f);
 
         float lean = Mathf.Clamp((transform.position.x - GameManager.LaneX[_lane]) * 7f, -22f, 22f);
