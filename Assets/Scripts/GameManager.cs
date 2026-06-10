@@ -29,6 +29,7 @@ public class GameManager : MonoBehaviour
     public float Distance { get; private set; }
     public int Coins { get; private set; }
     public int RunPowerUps { get; private set; }
+    public int RunDodges { get; private set; }
     public int Bonus { get; private set; }
     public int Score { get { return Mathf.FloorToInt(Distance) + Coins * 5 + Bonus; } }
 
@@ -275,6 +276,7 @@ public class GameManager : MonoBehaviour
     {
         if (CurrentState != State.Playing || _paused) return;
         _combo++;
+        RunDodges++;
         if (_combo > BestCombo) BestCombo = _combo;
         _comboTimer = ComboWindow;
         Bonus += 10 * _combo * Multiplier;
@@ -386,7 +388,7 @@ public class GameManager : MonoBehaviour
         _newBest = Score > GameData.HighScore;
         if (_newBest) GameData.HighScore = Score;
         if (BestCombo > GameData.BestCombo) GameData.BestCombo = BestCombo;
-        Missions.ReportRun(Coins, Mathf.FloorToInt(Distance), RunPowerUps);
+        Missions.ReportRun(Coins, Mathf.FloorToInt(Distance), RunPowerUps, RunDodges);
         GameData.SeenTutorial = true;
         GameData.Save();
     }
