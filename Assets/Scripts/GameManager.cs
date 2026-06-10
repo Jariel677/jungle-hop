@@ -67,7 +67,15 @@ public class GameManager : MonoBehaviour
 
     public PowerUp ActivePower { get { return _powerTimer > 0f ? _power : PowerUp.None; } }
     public float PowerTimeLeft { get { return Mathf.Max(0f, _powerTimer); } }
-    public int Multiplier { get { return ActivePower == PowerUp.Double ? 2 : 1; } }
+    public int Multiplier
+    {
+        get
+        {
+            int m = ActivePower == PowerUp.Double ? 2 : 1;
+            if (_combo >= 8) m += 2; else if (_combo >= 4) m += 1;   // dodge-streak bonus
+            return m;
+        }
+    }
 
     float _hitStopTimer;
     float _coinPulse;
@@ -506,7 +514,7 @@ public class GameManager : MonoBehaviour
         if (CurrentState == State.Playing || CurrentState == State.GameOver)
         {
             GUI.Label(new Rect(pad, pad, Screen.width * 0.6f, Screen.height * 0.1f),
-                      "SCORE  " + Score.ToString("N0"), _hud);
+                      "SCORE  " + Score.ToString("N0") + (Multiplier > 1 ? "   x" + Multiplier : ""), _hud);
             int sub0 = _sub.fontSize;
             if (_coinPulse > 0f)
                 _sub.fontSize = Mathf.RoundToInt(sub0 * (1f + Mathf.Clamp01(_coinPulse) * 0.4f));
