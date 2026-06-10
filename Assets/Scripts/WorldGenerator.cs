@@ -22,11 +22,13 @@ public class WorldGenerator : MonoBehaviour
     class Hazard { public GameObject go; public Bounds bounds; public int kind; public float centerY; public bool passed; }
     class Pickup { public GameObject go; public float baseY; }
     class Power { public GameObject go; public GameManager.PowerUp type; public float baseY; }
+    class Ramp { public GameObject go; public Bounds bounds; public bool used; }
 
     readonly List<Transform> _tiles = new List<Transform>();
     readonly List<Hazard> _hazards = new List<Hazard>();
     readonly List<Pickup> _coins = new List<Pickup>();
     readonly List<Power> _powers = new List<Power>();
+    readonly List<Ramp> _ramps = new List<Ramp>();
     readonly List<GameObject> _props = new List<GameObject>();
 
     float _nextTileZ, _nextRowZ = 36f, _nextPropZ = 12f;
@@ -39,6 +41,7 @@ public class WorldGenerator : MonoBehaviour
     Material _coinMat, _powerCore;
     Material[] _powerMat;
     Material _markJump, _markSlide, _markDodge;
+    Material _ramp, _rampStripe;
 
     GameObject[] _buildings;
     GameObject[] _cars;
@@ -128,6 +131,9 @@ public class WorldGenerator : MonoBehaviour
         _markJump = Art.Glow(new Color(0.25f, 1f, 0.4f), new Color(0.2f, 0.95f, 0.35f), 0.8f);
         _markSlide = Art.Glow(new Color(0.3f, 0.85f, 1f), new Color(0.25f, 0.78f, 0.97f), 0.8f);
         _markDodge = Art.Glow(new Color(1f, 0.32f, 0.86f), new Color(0.92f, 0.26f, 0.8f), 0.8f);
+
+        _ramp = Art.Glow(new Color(0.95f, 0.55f, 0.12f), new Color(0.8f, 0.4f, 0.05f), 0.6f);
+        _rampStripe = Art.Mat(new Color(0.13f, 0.13f, 0.14f), 0f, 0.3f);
     }
 
     void Update()
@@ -212,6 +218,21 @@ public class WorldGenerator : MonoBehaviour
                 Effects.Pickup(pg.transform.position, GameManager.PowerColor(_powers[i].type));
                 Destroy(pg);
                 _powers.RemoveAt(i);
+            }
+        }
+
+        // Launch ramps fling the player upward (not while flying on a jetpack).
+        if (gm.ActivePower != GameManager.PowerUp.Jetpack)
+        {
+            for (int i = 0; i < _ramps.Count; i++)
+            {
+                Ramp r = _ramps[i];
+                if (r.go == null || r.used) continue;
+                if (pb.Intersects(r.bounds))
+                {
+                    r.used = true;
+                    player.Launch(13.5f);
+                }
             }
         }
 
@@ -404,7 +425,12 @@ public class WorldGenerator : MonoBehaviour
             if (!blocked[lanes[i]]) { coinLane = lanes[i]; break; }
         }
 
-        if (coinLane >= 0 && Random.value < 0.82f)
+        if (coinLane >= 0 && Random.value < 0.09f)
+        {
+            SpawnRamp(coinLane, z);
+            SpawnCoinArc(coinLane, z + 2.5f);   // launch off the ramp into the coins
+        }
+        else if (coinLane >= 0 && Random.value < 0.82f)
         {
             int n = Random.Range(3, 6);
             for (int k = 0; k < n; k++)
@@ -590,6 +616,27 @@ public class WorldGenerator : MonoBehaviour
         _coins.Add(new Pickup { go = go, baseY = y });
     }
 
+    /// <summary>A launch ramp: running into it flings the player up into a coin arc.</summary>
+    void SpawnRamp(int lane, float z)
+    {
+        GameObject go = new GameObject("Ramp");
+        go.transform.SetParent(transform);
+        go.transform.position = new Vector3(GameManager.LaneX[lane], 0f, z);
+
+        GameObject surf = Art.Solid(PrimitiveType.Cube, go.transform, new Vector3(0f, 0.55f, 0.1f),
+                                    new Vector3(1.9f, 0.16f, 2.7f), _ramp, "Surface");
+        surf.transform.localRotation = Quaternion.Euler(-22f, 0f, 0f);
+        Art.Solid(PrimitiveType.Cube, go.transform, new Vector3(0f, 0.28f, 0.55f),
+                  new Vector3(1.9f, 0.55f, 1.5f), _ramp, "Base");
+        for (int s = -1; s <= 1; s += 2)
+            Art.Solid(PrimitiveType.Cube, go.transform, new Vector3(s * 0.45f, 0.6f, -0.95f),
+                      new Vector3(0.32f, 0.12f, 0.32f), _rampStripe, "Chevron");
+
+        Bounds b = new Bounds(new Vector3(GameManager.LaneX[lane], 0.6f, z),
+                              new Vector3(1.8f, 1.3f, 2.3f));
+        _ramps.Add(new Ramp { go = go, bounds = b });
+    }
+
     /// <summary>A shallow arc of coins peaking above a barrier, collected by jumping.</summary>
     void SpawnCoinArc(int lane, float z)
     {
@@ -638,6 +685,16 @@ public class WorldGenerator : MonoBehaviour
             {
                 Destroy(_props[i]);
                 _props.RemoveAt(i);
+            }
+        }
+
+        for (int i = _ramps.Count - 1; i >= 0; i--)
+        {
+            if (_ramps[i].go == null) { _ramps.RemoveAt(i); continue; }
+            if (_ramps[i].go.transform.position.z < pz - DespawnBehind)
+            {
+                Destroy(_ramps[i].go);
+                _ramps.RemoveAt(i);
             }
         }
 

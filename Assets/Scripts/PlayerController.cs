@@ -386,4 +386,14 @@ public class PlayerController : MonoBehaviour
         _slideTimer = SlideTime;
         if (AudioManager.Instance != null) AudioManager.Instance.Slide();
     }
+
+    /// <summary>Flings the runner upward — used by launch ramps in the world.</summary>
+    public void Launch(float velocity)
+    {
+        _sliding = false;
+        _vy = velocity;
+        _grounded = false;
+        Effects.DustPuff(FeetPos());
+        if (AudioManager.Instance != null) AudioManager.Instance.Jump();
+    }
 }
