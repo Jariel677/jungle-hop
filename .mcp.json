@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "UnityMCP": {
-      "command": "/Users/waynenolettegmail.com/.local/bin/uvx",
+      "command": "uvx",
       "args": ["--from", "mcpforunityserver==9.6.8", "mcp-for-unity"]
     }
   }
