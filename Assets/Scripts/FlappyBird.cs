@@ -29,6 +29,11 @@ public class FlappyBird : MonoBehaviour
     const float TreeSpacing = 3.7f;    // horizontal distance between tree pairs
     const int TreeCount = 6;
 
+    const float BananaCollectR = 0.55f; // monkey-to-banana distance that counts as a pickup
+
+    // Flip to true to log each score/banana to the Editor/Player log for verification.
+    const bool DebugScore = false;
+
     // ---- State --------------------------------------------------------------
     enum State { Ready, Playing, GameOver }
     State _state = State.Ready;
@@ -44,20 +49,25 @@ public class FlappyBird : MonoBehaviour
 
     int _score;
     int _best;
+    int _bananas;       // bananas collected this run
     float _rightEdge;   // world x of the screen's right edge (recomputed per frame)
     float _tileW;       // ground tile width
 
     Material _trunkMat;
     Material _foliageMat;
+    Material _bananaMat;
 
-    /// <summary>One tree pair: a root plus its precomputed gap centre and score flag.</summary>
+    /// <summary>One tree pair: a root plus its precomputed gap centre, score flag,
+    /// and the banana that sits in the gap for the monkey to collect.</summary>
     class Tree
     {
         public Transform root;
         public Transform top;
         public Transform bottom;
+        public Transform banana;
         public float gapCenter;
         public bool scored;
+        public bool collected;
     }
 
     // ---- Setup --------------------------------------------------------------
@@ -101,6 +111,7 @@ public class FlappyBird : MonoBehaviour
         Material bushDark = Art.Mat(new Color(0.16f, 0.42f, 0.18f), 0f, 0.1f); // bg foliage
         _trunkMat = Art.Mat(new Color(0.45f, 0.30f, 0.16f), 0f, 0.12f);      // tree trunk
         _foliageMat = Art.Mat(new Color(0.22f, 0.55f, 0.22f), 0f, 0.15f);    // tree leaves
+        _bananaMat = Art.Glow(new Color(1f, 0.85f, 0.2f), new Color(0.5f, 0.4f, 0.05f), 0.4f); // banana (glows so it pops)
 
         Material fur = Art.Mat(new Color(0.45f, 0.28f, 0.15f), 0f, 0.2f);    // monkey fur
         Material skin = Art.Mat(new Color(0.82f, 0.63f, 0.42f), 0f, 0.2f);   // face / muzzle
@@ -172,7 +183,18 @@ public class FlappyBird : MonoBehaviour
         Art.Solid(PrimitiveType.Cube, bottom, Vector3.zero, new Vector3(TreeHalfW * 2f, 14f, 0.9f), _trunkMat, "trunk");
         AddFoliage(bottom, 6.75f);
 
-        return new Tree { root = root, top = top, bottom = bottom, gapCenter = 0f, scored = true };
+        // Banana — a little glowing crescent (three tilted cubes) that rides with
+        // the tree in the gap. PlaceTree drops it at the gap centre; collecting it
+        // hides it until the tree recycles.
+        var banana = new GameObject("banana").transform;
+        banana.SetParent(root, false);
+        var b1 = Art.Solid(PrimitiveType.Cube, banana, new Vector3(-0.02f, 0.19f, 0f), new Vector3(0.14f, 0.30f, 0.14f), _bananaMat, "peel");
+        b1.transform.localRotation = Quaternion.Euler(0f, 0f, 38f);
+        Art.Solid(PrimitiveType.Cube, banana, new Vector3(0.12f, 0f, 0f), new Vector3(0.14f, 0.34f, 0.14f), _bananaMat, "peel");
+        var b3 = Art.Solid(PrimitiveType.Cube, banana, new Vector3(-0.02f, -0.19f, 0f), new Vector3(0.14f, 0.30f, 0.14f), _bananaMat, "peel");
+        b3.transform.localRotation = Quaternion.Euler(0f, 0f, -38f);
+
+        return new Tree { root = root, top = top, bottom = bottom, banana = banana, gapCenter = 0f, scored = true, collected = true };
     }
 
     /// <summary>A bushy green cap of leaves at the mouth end of a trunk.</summary>
@@ -194,6 +216,7 @@ public class FlappyBird : MonoBehaviour
     {
         _state = State.Ready;
         _score = 0;
+        _bananas = 0;
         _monkeyVel = 0f;
         _readyBaseY = 0.4f;
         _monkey.position = new Vector3(MonkeyX, _readyBaseY, 0f);
@@ -236,6 +259,12 @@ public class FlappyBird : MonoBehaviour
         t.root.position = new Vector3(x, 0f, 0.5f);
         t.top.localPosition = new Vector3(0f, t.gapCenter + TreeGap * 0.5f + 7f, 0f);
         t.bottom.localPosition = new Vector3(0f, t.gapCenter - TreeGap * 0.5f - 7f, 0f);
+        t.scored = false; // a freshly (re)placed tree is scoreable again; recycling forgot this and capped score at TreeCount
+
+        // Drop a fresh banana in the gap (local z -0.5 puts it on the monkey's z=0 plane).
+        t.banana.localPosition = new Vector3(0f, t.gapCenter, -0.5f);
+        t.banana.gameObject.SetActive(true);
+        t.collected = false;
     }
 
     /// <summary>
@@ -323,12 +352,33 @@ public class FlappyBird : MonoBehaviour
             t.root.position = rp;
 
             if (rp.x < leftmostRecycleX)
-                PlaceTree(t, RightmostTreeX() + TreeSpacing);
-
-            if (!t.scored && rp.x < MonkeyX)
             {
+                PlaceTree(t, RightmostTreeX() + TreeSpacing);
+            }
+            else if (!t.scored && rp.x < MonkeyX)
+            {
+                // Score only when the tree actually crosses the monkey — not on the
+                // same frame it recycled (rp is stale there, which double-counted).
                 t.scored = true;
                 _score++;
+                if (DebugScore) Debug.Log($"[JungleHop] score={_score} (tree {i} crossed monkey at x={rp.x:F2})");
+            }
+
+            // Banana pickup: collect on overlap, otherwise spin it to catch the eye.
+            if (!t.collected)
+            {
+                Vector3 bp = t.banana.position;
+                if (Mathf.Abs(bp.x - MonkeyX) < BananaCollectR && Mathf.Abs(bp.y - pos.y) < BananaCollectR)
+                {
+                    t.collected = true;
+                    t.banana.gameObject.SetActive(false);
+                    _bananas++;
+                    if (DebugScore) Debug.Log($"[JungleHop] banana={_bananas} (collected from tree {i})");
+                }
+                else
+                {
+                    t.banana.Rotate(0f, 220f * dt, 0f);
+                }
             }
 
             if (Overlaps(t, pos.y)) { Die(); return; }
@@ -375,7 +425,7 @@ public class FlappyBird : MonoBehaviour
     }
 
     // ---- HUD (immediate-mode, matches the project's OnGUI style) -----------
-    GUIStyle _big, _mid, _small;
+    GUIStyle _big, _mid, _small, _banana;
 
     void OnGUI()
     {
@@ -384,15 +434,21 @@ public class FlappyBird : MonoBehaviour
             _big = new GUIStyle(GUI.skin.label) { fontSize = 54, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
             _mid = new GUIStyle(GUI.skin.label) { fontSize = 30, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
             _small = new GUIStyle(GUI.skin.label) { fontSize = 20, alignment = TextAnchor.MiddleCenter };
+            _banana = new GUIStyle(GUI.skin.label) { fontSize = 30, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperRight };
         }
         _big.normal.textColor = Color.white;
         _mid.normal.textColor = Color.white;
         _small.normal.textColor = Color.white;
+        _banana.normal.textColor = new Color(1f, 0.88f, 0.2f);
 
         float w = Screen.width, h = Screen.height;
 
         if (_state != State.GameOver)
+        {
             GUI.Label(new Rect(0f, h * 0.06f, w, 70f), _score.ToString(), _big);
+            // Banana tally, pinned to the top-right corner.
+            GUI.Label(new Rect(w - 210f, 16f, 194f, 44f), "Bananas  " + _bananas, _banana);
+        }
 
         if (_state == State.Ready)
         {
@@ -401,16 +457,17 @@ public class FlappyBird : MonoBehaviour
         }
         else if (_state == State.GameOver)
         {
-            var box = new Rect(w * 0.5f - 170f, h * 0.30f, 340f, 240f);
+            var box = new Rect(w * 0.5f - 170f, h * 0.30f, 340f, 278f);
             Color prev = GUI.color;
             GUI.color = new Color(0f, 0f, 0f, 0.55f);
             GUI.DrawTexture(box, Texture2D.whiteTexture);
             GUI.color = prev;
 
-            GUI.Label(new Rect(box.x, box.y + 20f, box.width, 60f), "GAME OVER", _mid);
-            GUI.Label(new Rect(box.x, box.y + 90f, box.width, 40f), "Score  " + _score, _mid);
-            GUI.Label(new Rect(box.x, box.y + 135f, box.width, 40f), "Best  " + _best, _small);
-            GUI.Label(new Rect(box.x, box.y + 185f, box.width, 40f), "CLICK / SPACE to play again", _small);
+            GUI.Label(new Rect(box.x, box.y + 18f, box.width, 60f), "GAME OVER", _mid);
+            GUI.Label(new Rect(box.x, box.y + 80f, box.width, 40f), "Score  " + _score, _mid);
+            GUI.Label(new Rect(box.x, box.y + 122f, box.width, 40f), "Bananas  " + _bananas, _small);
+            GUI.Label(new Rect(box.x, box.y + 160f, box.width, 40f), "Best  " + _best, _small);
+            GUI.Label(new Rect(box.x, box.y + 212f, box.width, 40f), "CLICK / SPACE to play again", _small);
         }
     }
 }
