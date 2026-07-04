@@ -56,4 +56,22 @@ public static class Art
         if (r != null) r.sharedMaterial = mat;
         return go;
     }
+
+    /// <summary>An unlit, alpha-blended material for a flat sprite (e.g. clouds).</summary>
+    public static Material SpriteMat(Texture texture)
+    {
+        Shader s = Shader.Find("Unlit/Transparent");
+        Material m = new Material(s != null ? s : Std);
+        m.mainTexture = texture;
+        return m;
+    }
+
+    /// <summary>An opaque, unlit material for a full-bright backdrop image.</summary>
+    public static Material BackdropMat(Texture texture)
+    {
+        Shader s = Shader.Find("Unlit/Texture");
+        Material m = new Material(s != null ? s : Std);
+        m.mainTexture = texture;
+        return m;
+    }
 }

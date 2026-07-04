@@ -2,17 +2,20 @@ using UnityEngine;
 
 /// <summary>
 /// Self-contained Flappy Bird–style game with a jungle reskin: a monkey flaps
-/// through gaps between trees over a jungle backdrop. A single MonoBehaviour
-/// builds the whole world at runtime (orthographic camera, monkey, scrolling
-/// trees, jungle floor, background foliage) and runs the Ready / Playing /
-/// GameOver state machine. Drop this on one empty GameObject and press Play.
+/// through gaps between trees over a jungle backdrop, collecting bananas that
+/// unlock recolourable skins. Runs the Ready / Playing / Paused / GameOver
+/// state machine. Drop this on one empty GameObject and press Play.
 ///
-/// Controls: SPACE / left-click / touch to flap (and to start or restart).
-/// Built with the Built-in render pipeline; reuses <see cref="Art"/> for
-/// materials and collider-free primitives. The class name is kept as
+/// Controls: SPACE / left-click / touch to flap (and to start or restart);
+/// Esc or the on-screen button to pause. The class name is kept as
 /// <c>FlappyBird</c> so the existing scene reference stays wired.
+///
+/// This is one partial class split across three files by concern:
+///   FlappyBird.cs        — tunables, state, lifecycle, and per-frame simulation
+///   FlappyBird.World.cs  — one-time procedural construction of the scene
+///   FlappyBird.Hud.cs    — immediate-mode HUD, pause menu, and skins settings
 /// </summary>
-public class FlappyBird : MonoBehaviour
+public partial class FlappyBird : MonoBehaviour
 {
     // ---- Tunables -----------------------------------------------------------
     const float OrthoSize = 5f;        // half-height of the view; y spans -5..5
@@ -31,12 +34,27 @@ public class FlappyBird : MonoBehaviour
 
     const float BananaCollectR = 0.55f; // monkey-to-banana distance that counts as a pickup
 
-    // Flip to true to log each score/banana to the Editor/Player log for verification.
-    const bool DebugScore = false;
+    const string GameTitle = "JUNGLE HOP"; // shown on the start screen (edit to rename the game)
+
+    // On-screen pause/menu button (top-right); its click is handled in Update, drawn in OnGUI.
+    const float PauseBtnMargin = 14f, PauseBtnY = 14f, PauseBtnSize = 64f;
+
+    // Selectable monkey skins: display name, fur colour, and lifetime bananas needed to unlock.
+    static readonly (string name, Color color, int need)[] Monkeys =
+    {
+        ("Brown",  new Color(0.45f, 0.28f, 0.15f), 0),
+        ("Yellow", new Color(0.95f, 0.80f, 0.15f), 50),
+        ("Blue",   new Color(0.30f, 0.55f, 0.95f), 100),
+        ("Green",  new Color(0.35f, 0.75f, 0.35f), 300),
+    };
+
+    // Flip to true to log score/banana/skin events to the Editor/Player log for verification.
+    const bool DebugScore = true;
 
     // ---- State --------------------------------------------------------------
-    enum State { Ready, Playing, GameOver }
+    enum State { Ready, Playing, GameOver, Paused }
     State _state = State.Ready;
+    bool _inSettings;   // true when the settings sub-panel is open over the pause menu
 
     Camera _cam;
     Transform _monkey;
@@ -45,17 +63,27 @@ public class FlappyBird : MonoBehaviour
 
     Transform[] _ground = new Transform[2];
     Transform[] _bgFoliage = new Transform[5];
+    Transform[] _clouds;
+    Transform _backdrop;     // in-game jungle scene behind the gameplay
     Tree[] _trees;
 
     int _score;
     int _best;
     int _bananas;       // bananas collected this run
+    int _totalBananas;  // lifetime bananas (auto-saved on death; drives skin unlocks)
+    int _equipped;      // index into Monkeys of the equipped skin
     float _rightEdge;   // world x of the screen's right edge (recomputed per frame)
     float _tileW;       // ground tile width
 
     Material _trunkMat;
     Material _foliageMat;
+    Material _foliageDarkMat; // canopy lowlights for depth
+    Material _woodCapMat;     // light cut-log end
+    Material _woodRingMat;    // cut-log inner ring
+    Material _vineMat;        // hanging vines
     Material _bananaMat;
+    Material _bananaTipMat;   // banana stem / tip
+    Material _furMat;   // monkey fur; recoloured when a skin is equipped
 
     /// <summary>One tree pair: a root plus its precomputed gap centre, score flag,
     /// and the banana that sits in the gap for the monkey to collect.</summary>
@@ -73,136 +101,19 @@ public class FlappyBird : MonoBehaviour
     // ---- Setup --------------------------------------------------------------
     void Awake()
     {
-        _best = PlayerPrefs.GetInt("FlappyBest", 0);
+        Screen.sleepTimeout = SleepTimeout.NeverSleep; // keep the display awake while playing
         BuildWorld();
         ResetToReady();
     }
 
-    void BuildWorld()
+    /// <summary>Loads persisted best score, lifetime bananas, and equipped skin.</summary>
+    void LoadPrefs()
     {
-        // Camera — orthographic, looking down +Z at the z=0 play plane.
-        var camGo = new GameObject("Main Camera");
-        camGo.transform.SetParent(transform, true);
-        camGo.tag = "MainCamera";
-        _cam = camGo.AddComponent<Camera>();
-        _cam.orthographic = true;
-        _cam.orthographicSize = OrthoSize;
-        _cam.transform.position = new Vector3(0f, 0f, -10f);
-        _cam.nearClipPlane = 0.1f;
-        _cam.farClipPlane = 50f;
-        _cam.clearFlags = CameraClearFlags.SolidColor;
-        _cam.backgroundColor = new Color(0.53f, 0.73f, 0.48f); // hazy jungle sky
-
-        // Lighting — flat ambient plus a soft key light so Standard reads as flat.
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.85f, 0.85f, 0.85f);
-        var lightGo = new GameObject("Sun");
-        lightGo.transform.SetParent(transform, true);
-        var sun = lightGo.AddComponent<Light>();
-        sun.type = LightType.Directional;
-        sun.intensity = 0.8f;
-        sun.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
-
-        _tileW = 2f * OrthoSize * 2f; // generous width; covers wide aspect ratios
-
-        // Materials.
-        Material dirt = Art.Mat(new Color(0.42f, 0.30f, 0.16f), 0f, 0.1f);   // jungle earth
-        Material moss = Art.Mat(new Color(0.24f, 0.50f, 0.20f), 0f, 0.1f);   // mossy grass
-        Material bushDark = Art.Mat(new Color(0.16f, 0.42f, 0.18f), 0f, 0.1f); // bg foliage
-        _trunkMat = Art.Mat(new Color(0.45f, 0.30f, 0.16f), 0f, 0.12f);      // tree trunk
-        _foliageMat = Art.Mat(new Color(0.22f, 0.55f, 0.22f), 0f, 0.15f);    // tree leaves
-        _bananaMat = Art.Glow(new Color(1f, 0.85f, 0.2f), new Color(0.5f, 0.4f, 0.05f), 0.4f); // banana (glows so it pops)
-
-        Material fur = Art.Mat(new Color(0.45f, 0.28f, 0.15f), 0f, 0.2f);    // monkey fur
-        Material skin = Art.Mat(new Color(0.82f, 0.63f, 0.42f), 0f, 0.2f);   // face / muzzle
-        Material eyeMat = Art.Mat(Color.black, 0f, 0.1f);
-
-        // Jungle floor — two tiles that scroll and recycle to fake infinite terrain.
-        for (int i = 0; i < 2; i++)
-        {
-            var g = new GameObject("Ground" + i).transform;
-            g.SetParent(transform, true);
-            Art.Solid(PrimitiveType.Cube, g, new Vector3(0f, -0.6f, 0f),
-                      new Vector3(_tileW, 1.2f, 1f), dirt, "dirt");
-            Art.Solid(PrimitiveType.Cube, g, new Vector3(0f, 0.05f, -0.05f),
-                      new Vector3(_tileW, 0.22f, 1f), moss, "moss");
-            g.position = new Vector3(i * _tileW, GroundTop, 1f);
-            _ground[i] = g;
-        }
-
-        // Background foliage — dark-green bush clumps drifting slowly for parallax.
-        for (int i = 0; i < _bgFoliage.Length; i++)
-        {
-            var c = new GameObject("Bush" + i).transform;
-            c.SetParent(transform, true);
-            Art.Solid(PrimitiveType.Cube, c, Vector3.zero, new Vector3(2.0f, 1.1f, 1f), bushDark, "leaves");
-            Art.Solid(PrimitiveType.Cube, c, new Vector3(0.9f, -0.2f, 0f), new Vector3(1.3f, 0.8f, 1f), bushDark, "leaves");
-            Art.Solid(PrimitiveType.Cube, c, new Vector3(-0.9f, -0.2f, 0f), new Vector3(1.2f, 0.7f, 1f), bushDark, "leaves");
-            c.position = new Vector3(i * 4.2f - 6f, 2.6f - (i % 3) * 1.4f, 5f);
-            _bgFoliage[i] = c;
-        }
-
-        // Monkey — body, head, face, ears, eyes, tail. Fixed x; y is simulated.
-        var monkey = new GameObject("Monkey").transform;
-        monkey.SetParent(transform, true);
-        Art.Solid(PrimitiveType.Cube, monkey, Vector3.zero, new Vector3(0.6f, 0.58f, 0.5f), fur, "body");
-        Art.Solid(PrimitiveType.Cube, monkey, new Vector3(0.02f, 0.02f, -0.26f), new Vector3(0.34f, 0.34f, 0.12f), skin, "belly");
-        Art.Solid(PrimitiveType.Cube, monkey, new Vector3(0.16f, 0.34f, -0.05f), new Vector3(0.5f, 0.46f, 0.46f), fur, "head");
-        Art.Solid(PrimitiveType.Cube, monkey, new Vector3(0.26f, 0.28f, -0.26f), new Vector3(0.32f, 0.30f, 0.12f), skin, "face");
-        Art.Solid(PrimitiveType.Cube, monkey, new Vector3(-0.06f, 0.54f, 0f), new Vector3(0.16f, 0.18f, 0.12f), fur, "earL");
-        Art.Solid(PrimitiveType.Cube, monkey, new Vector3(0.38f, 0.54f, 0f), new Vector3(0.16f, 0.18f, 0.12f), fur, "earR");
-        Art.Solid(PrimitiveType.Cube, monkey, new Vector3(0.18f, 0.40f, -0.30f), new Vector3(0.07f, 0.09f, 0.05f), eyeMat, "eyeL");
-        Art.Solid(PrimitiveType.Cube, monkey, new Vector3(0.34f, 0.40f, -0.30f), new Vector3(0.07f, 0.09f, 0.05f), eyeMat, "eyeR");
-        Art.Solid(PrimitiveType.Cube, monkey, new Vector3(0.30f, 0.24f, -0.30f), new Vector3(0.05f, 0.05f, 0.05f), eyeMat, "nose");
-        // Curling tail behind the body.
-        Art.Solid(PrimitiveType.Cube, monkey, new Vector3(-0.34f, -0.12f, 0.05f), new Vector3(0.32f, 0.12f, 0.12f), fur, "tail1");
-        Art.Solid(PrimitiveType.Cube, monkey, new Vector3(-0.52f, 0.06f, 0.05f), new Vector3(0.12f, 0.30f, 0.12f), fur, "tail2");
-        monkey.position = new Vector3(MonkeyX, 0f, 0f);
-        _monkey = monkey;
-
-        // Trees — a small pool recycled from right to left.
-        _trees = new Tree[TreeCount];
-        for (int i = 0; i < TreeCount; i++) _trees[i] = BuildTree(i);
-    }
-
-    Tree BuildTree(int index)
-    {
-        var root = new GameObject("Tree" + index).transform;
-        root.SetParent(transform, true);
-
-        // top / bottom are *unscaled* containers so their children (a tall trunk
-        // plus a bushy foliage cap) keep correct world sizes. The trunk is 14 tall
-        // so it always runs off the edge of the screen; foliage sits at the mouth.
-        var top = new GameObject("top").transform;
-        top.SetParent(root, false);
-        Art.Solid(PrimitiveType.Cube, top, Vector3.zero, new Vector3(TreeHalfW * 2f, 14f, 0.9f), _trunkMat, "trunk");
-        AddFoliage(top, -6.75f);
-
-        var bottom = new GameObject("bottom").transform;
-        bottom.SetParent(root, false);
-        Art.Solid(PrimitiveType.Cube, bottom, Vector3.zero, new Vector3(TreeHalfW * 2f, 14f, 0.9f), _trunkMat, "trunk");
-        AddFoliage(bottom, 6.75f);
-
-        // Banana — a little glowing crescent (three tilted cubes) that rides with
-        // the tree in the gap. PlaceTree drops it at the gap centre; collecting it
-        // hides it until the tree recycles.
-        var banana = new GameObject("banana").transform;
-        banana.SetParent(root, false);
-        var b1 = Art.Solid(PrimitiveType.Cube, banana, new Vector3(-0.02f, 0.19f, 0f), new Vector3(0.14f, 0.30f, 0.14f), _bananaMat, "peel");
-        b1.transform.localRotation = Quaternion.Euler(0f, 0f, 38f);
-        Art.Solid(PrimitiveType.Cube, banana, new Vector3(0.12f, 0f, 0f), new Vector3(0.14f, 0.34f, 0.14f), _bananaMat, "peel");
-        var b3 = Art.Solid(PrimitiveType.Cube, banana, new Vector3(-0.02f, -0.19f, 0f), new Vector3(0.14f, 0.30f, 0.14f), _bananaMat, "peel");
-        b3.transform.localRotation = Quaternion.Euler(0f, 0f, -38f);
-
-        return new Tree { root = root, top = top, bottom = bottom, banana = banana, gapCenter = 0f, scored = true, collected = true };
-    }
-
-    /// <summary>A bushy green cap of leaves at the mouth end of a trunk.</summary>
-    void AddFoliage(Transform trunk, float y)
-    {
-        Art.Solid(PrimitiveType.Cube, trunk, new Vector3(0f, y, -0.05f), new Vector3(2.0f, 0.7f, 1.15f), _foliageMat, "leaves");
-        Art.Solid(PrimitiveType.Cube, trunk, new Vector3(0.7f, y, -0.1f), new Vector3(0.9f, 0.55f, 1.1f), _foliageMat, "leaves");
-        Art.Solid(PrimitiveType.Cube, trunk, new Vector3(-0.7f, y, -0.1f), new Vector3(0.9f, 0.55f, 1.1f), _foliageMat, "leaves");
+        _best = PlayerPrefs.GetInt("FlappyBest", 0);
+        _totalBananas = PlayerPrefs.GetInt("TotalBananas", 0);
+        _equipped = PlayerPrefs.GetInt("MonkeySkin", 0);
+        if (_equipped < 0 || _equipped >= Monkeys.Length) _equipped = 0;
+        if (Monkeys[_equipped].need > _totalBananas) _equipped = 0; // safety: never keep a locked skin
     }
 
     /// <summary>Tree/ground speed ramps gently with score, then caps out.</summary>
@@ -243,12 +154,35 @@ public class FlappyBird : MonoBehaviour
     void Die()
     {
         _state = State.GameOver;
+
+        // Auto-save: bank this run's bananas into the lifetime total immediately.
+        _totalBananas += _bananas;
+        PlayerPrefs.SetInt("TotalBananas", _totalBananas);
         if (_score > _best)
         {
             _best = _score;
             PlayerPrefs.SetInt("FlappyBest", _best);
-            PlayerPrefs.Save();
         }
+        PlayerPrefs.Save();
+        if (DebugScore) Debug.Log($"[JungleHop] autosave: totalBananas={_totalBananas} (+{_bananas} this run)");
+    }
+
+    /// <summary>Recolours the monkey's fur to the equipped skin.</summary>
+    void ApplyMonkeyColor()
+    {
+        if (_furMat != null) _furMat.color = Monkeys[_equipped].color;
+    }
+
+    /// <summary>Equips a skin if it's unlocked, persisting the choice.</summary>
+    void EquipSkin(int index)
+    {
+        if (index < 0 || index >= Monkeys.Length) return;
+        if (Monkeys[index].need > _totalBananas) return; // still locked
+        _equipped = index;
+        PlayerPrefs.SetInt("MonkeySkin", index);
+        PlayerPrefs.Save();
+        ApplyMonkeyColor();
+        if (DebugScore) Debug.Log($"[JungleHop] equipped {Monkeys[index].name} monkey");
     }
 
     void PlaceTree(Tree t, float x)
@@ -294,9 +228,34 @@ public class FlappyBird : MonoBehaviour
         }
 
         _rightEdge = _cam.orthographicSize * _cam.aspect;
-        bool flap = Input.GetKeyDown(KeyCode.Space)
-                    || Input.GetMouseButtonDown(0)
-                    || (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began);
+
+        // Corner menu button: pauses while playing, or opens skins/settings when not
+        // playing — so the menu is reachable without being mid-run. Its click never
+        // doubles as a flap (guarded below).
+        bool mouseDown = Input.GetMouseButtonDown(0);
+        bool cornerBtn = mouseDown && !_inSettings && PointInPauseButton(Input.mousePosition)
+                         && (_state == State.Playing || _state == State.Ready || _state == State.GameOver);
+        if (cornerBtn)
+        {
+            if (_state == State.Playing) { _state = State.Paused; _inSettings = false; }
+            else { _inSettings = true; } // Ready / GameOver → straight into settings
+            if (DebugScore) Debug.Log($"[JungleHop] menu open: state={_state} settings={_inSettings}");
+        }
+
+        // Esc closes an open menu, otherwise toggles pause during play.
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (_inSettings) _inSettings = false;
+            else if (_state == State.Playing) _state = State.Paused;
+            else if (_state == State.Paused) _state = State.Playing;
+        }
+
+        // A flap is Space / touch / left-click — never while a menu is open, while
+        // paused, or when the click landed on the corner button.
+        bool flap = !_inSettings && _state != State.Paused
+                    && (Input.GetKeyDown(KeyCode.Space)
+                        || (mouseDown && !cornerBtn)
+                        || (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began));
 
         switch (_state)
         {
@@ -309,6 +268,9 @@ public class FlappyBird : MonoBehaviour
                 if (flap) _monkeyVel = FlapVelocity;
                 Simulate(Time.deltaTime);
                 break;
+
+            case State.Paused:
+                break; // world frozen; the pause/settings menu is drawn in OnGUI
 
             case State.GameOver:
                 // Small settle so the monkey visibly drops onto the ground.
@@ -323,7 +285,7 @@ public class FlappyBird : MonoBehaviour
                 break;
         }
 
-        ScrollDecor(Time.deltaTime, _state == State.GameOver ? 0f : 1f);
+        ScrollDecor(Time.deltaTime, (_state == State.GameOver || _state == State.Paused) ? 0f : 1f);
     }
 
     void Simulate(float dt)
@@ -373,6 +335,7 @@ public class FlappyBird : MonoBehaviour
                     t.collected = true;
                     t.banana.gameObject.SetActive(false);
                     _bananas++;
+                    PlayBanana();
                     if (DebugScore) Debug.Log($"[JungleHop] banana={_bananas} (collected from tree {i})");
                 }
                 else
@@ -422,52 +385,26 @@ public class FlappyBird : MonoBehaviour
             if (c.x < -_rightEdge - 3f) c.x = _rightEdge + 3f;
             _bgFoliage[i].position = c;
         }
+        if (_clouds != null)
+        {
+            for (int i = 0; i < _clouds.Length; i++)
+            {
+                if (_clouds[i] == null) continue;
+                Vector3 c = _clouds[i].position;
+                c.x -= move * 0.12f; // slowest layer — far-away drift
+                if (c.x < -_rightEdge - 4f) c.x = _rightEdge + 4f;
+                _clouds[i].position = c;
+            }
+        }
     }
 
-    // ---- HUD (immediate-mode, matches the project's OnGUI style) -----------
-    GUIStyle _big, _mid, _small, _banana;
-
-    void OnGUI()
+    /// <summary>Screen-space hit test for the top-left pause button.</summary>
+    bool PointInPauseButton(Vector3 mousePos)
     {
-        if (_big == null)
-        {
-            _big = new GUIStyle(GUI.skin.label) { fontSize = 54, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            _mid = new GUIStyle(GUI.skin.label) { fontSize = 30, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            _small = new GUIStyle(GUI.skin.label) { fontSize = 20, alignment = TextAnchor.MiddleCenter };
-            _banana = new GUIStyle(GUI.skin.label) { fontSize = 30, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperRight };
-        }
-        _big.normal.textColor = Color.white;
-        _mid.normal.textColor = Color.white;
-        _small.normal.textColor = Color.white;
-        _banana.normal.textColor = new Color(1f, 0.88f, 0.2f);
-
-        float w = Screen.width, h = Screen.height;
-
-        if (_state != State.GameOver)
-        {
-            GUI.Label(new Rect(0f, h * 0.06f, w, 70f), _score.ToString(), _big);
-            // Banana tally, pinned to the top-right corner.
-            GUI.Label(new Rect(w - 210f, 16f, 194f, 44f), "Bananas  " + _bananas, _banana);
-        }
-
-        if (_state == State.Ready)
-        {
-            GUI.Label(new Rect(0f, h * 0.34f, w, 70f), "JUNGLE HOP", _big);
-            GUI.Label(new Rect(0f, h * 0.46f, w, 40f), "SPACE / CLICK / TAP to flap", _small);
-        }
-        else if (_state == State.GameOver)
-        {
-            var box = new Rect(w * 0.5f - 170f, h * 0.30f, 340f, 278f);
-            Color prev = GUI.color;
-            GUI.color = new Color(0f, 0f, 0f, 0.55f);
-            GUI.DrawTexture(box, Texture2D.whiteTexture);
-            GUI.color = prev;
-
-            GUI.Label(new Rect(box.x, box.y + 18f, box.width, 60f), "GAME OVER", _mid);
-            GUI.Label(new Rect(box.x, box.y + 80f, box.width, 40f), "Score  " + _score, _mid);
-            GUI.Label(new Rect(box.x, box.y + 122f, box.width, 40f), "Bananas  " + _bananas, _small);
-            GUI.Label(new Rect(box.x, box.y + 160f, box.width, 40f), "Best  " + _best, _small);
-            GUI.Label(new Rect(box.x, box.y + 212f, box.width, 40f), "CLICK / SPACE to play again", _small);
-        }
+        float x = mousePos.x;
+        float yTop = Screen.height - mousePos.y;               // Input origin is bottom-left; GUI is top-left
+        float bx = Screen.width - PauseBtnSize - PauseBtnMargin; // top-right corner
+        return x >= bx && x <= bx + PauseBtnSize
+            && yTop >= PauseBtnY && yTop <= PauseBtnY + PauseBtnSize;
     }
 }
