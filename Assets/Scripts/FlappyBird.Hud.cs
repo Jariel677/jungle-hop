@@ -204,13 +204,19 @@ public partial class FlappyBird
         Sprite(new Rect(px, py, pw, ph), "pause/bg");
         Sprite(new Rect(px + pw * 0.08f, py + ph * 0.02f, pw * 0.84f, ph * 0.24f), "pause/header");
 
-        float bw = pw * 0.52f, bh = bw * 0.42f, bx = px + (pw - bw) * 0.5f;
-        if (SpriteButton(new Rect(bx, py + ph * 0.42f, bw, bh), "btn/play"))
+        // Stack the buttons from a fixed start with a guaranteed gap, so the resume
+        // and settings buttons never touch — even on short/wide game views where the
+        // old ph-fraction positions used to overlap.
+        float bw = Mathf.Min(pw * 0.52f, 300f), bh = bw * 0.40f, bx = px + (pw - bw) * 0.5f;
+        float gap = Mathf.Max(bh * 0.35f, 22f);
+        float by = py + ph * 0.34f;
+        if (SpriteButton(new Rect(bx, by, bw, bh), "btn/play"))
         {
             _state = State.Playing;
             if (DebugScore) Debug.Log("[JungleHop] resume");
         }
-        if (SpriteButton(new Rect(bx, py + ph * 0.64f, bw, bh), "btn/settings"))
+        by += bh + gap;
+        if (SpriteButton(new Rect(bx, by, bw, bh), "btn/settings"))
             _inSettings = true;
     }
 
