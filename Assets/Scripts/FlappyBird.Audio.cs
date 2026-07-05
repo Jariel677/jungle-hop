@@ -10,8 +10,6 @@ public partial class FlappyBird
 {
     AudioSource _sfx;
     AudioClip _bananaClip;
-    int _bananaCombo;        // consecutive quick pickups — drives a rising pitch
-    float _lastBananaTime;   // used to reset the combo after a pause
 
     /// <summary>Creates the AudioSource and the banana pickup clip (idempotent).</summary>
     void SetupAudio()
@@ -22,17 +20,13 @@ public partial class FlappyBird
         if (_bananaClip == null) _bananaClip = MakePickupClip();
     }
 
-    /// <summary>Plays the banana pickup blip. Rapid pickups climb in pitch (like a
-    /// coin combo, so repetition feels rewarding); a pause resets it so it never
-    /// becomes a repetitive drone.</summary>
+    /// <summary>Plays the banana pickup pluck at a constant pitch, so every banana
+    /// sounds identical no matter how many you collect.</summary>
     void PlayBanana()
     {
         if (_sfx == null || _bananaClip == null) return;
-        if (Time.time - _lastBananaTime > 1.2f) _bananaCombo = 0;
-        _lastBananaTime = Time.time;
-        _sfx.pitch = 1f + Mathf.Min(_bananaCombo, 5) * 0.02f;  // subtle lift only, caps at +10%
+        _sfx.pitch = 1f;
         _sfx.PlayOneShot(_bananaClip, 0.5f);
-        _bananaCombo++;
     }
 
     /// <summary>Builds a soft two-note marimba/harp pluck (A4 then C#5, a warm major
