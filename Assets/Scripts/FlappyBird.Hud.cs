@@ -21,6 +21,8 @@ public partial class FlappyBird
     Texture2D _wPanel; int _wPanelW = -1, _wPanelH = -1;
     Texture2D _wCard, _wCardSel; int _wCardW = -1, _wCardH = -1;
     Texture2D _wFur, _wFace, _wLock;
+    Texture2D _wArrowL, _wArrowR;   // wardrobe page arrows
+    int _wardPage;                  // current wardrobe page
     GUIStyle _wTitle, _wName, _wTag;
 
     Font _uiFont;
@@ -88,6 +90,40 @@ public partial class FlappyBird
     {
         GUI.Label(new Rect(0f, h * 0.06f, w, 70f), _score.ToString(), _big);
         DrawBananaChip(w, h);
+        DrawActivePowerups(w, h);
+    }
+
+    /// <summary>Top-left stack of the currently active power-ups, each with a
+    /// shrinking timer bar (the shield shows a full bar until it is used).</summary>
+    void DrawActivePowerups(float w, float h)
+    {
+        if (_powTex == null)
+            _powTex = new[] {
+                Resources.Load<Texture2D>("Items/pow_shield"),
+                Resources.Load<Texture2D>("Items/pow_slow"),
+                Resources.Load<Texture2D>("Items/pow_magnet"),
+                Resources.Load<Texture2D>("Items/pow_2x") };
+
+        float scale = Mathf.Clamp(h / 1080f, 0.7f, 1.7f);
+        float sz = 58f * scale, pad = 16f * scale;
+        float y = pad + 80f * scale; // below the score
+        if (_shield)           DrawPowIcon(pad, ref y, sz, _powTex[0], 1f);
+        if (_slowTimer > 0f)   DrawPowIcon(pad, ref y, sz, _powTex[1], _slowTimer / PowSlowDur);
+        if (_magnetTimer > 0f) DrawPowIcon(pad, ref y, sz, _powTex[2], _magnetTimer / PowMagnetDur);
+        if (_x2Timer > 0f)     DrawPowIcon(pad, ref y, sz, _powTex[3], _x2Timer / Pow2xDur);
+    }
+
+    void DrawPowIcon(float x, ref float y, float sz, Texture2D tex, float frac)
+    {
+        if (tex != null) GUI.DrawTexture(new Rect(x, y, sz, sz), tex, ScaleMode.ScaleToFit);
+        float bh = 6f, by = y + sz + 3f;
+        Color prev = GUI.color;
+        GUI.color = new Color(0f, 0f, 0f, 0.4f);
+        GUI.DrawTexture(new Rect(x, by, sz, bh), Texture2D.whiteTexture);
+        GUI.color = new Color(1f, 0.86f, 0.32f, 0.95f);
+        GUI.DrawTexture(new Rect(x, by, sz * Mathf.Clamp01(frac), bh), Texture2D.whiteTexture);
+        GUI.color = prev;
+        y += sz + 20f;
     }
 
     /// <summary>Top-right banana tally: a rounded translucent pill with a gold rim,
@@ -278,10 +314,16 @@ public partial class FlappyBird
         _wTag.normal.textColor = new Color(1f, 0.88f, 0.40f);
         DrawBananaCount(new Rect(px, avy + av + 30f * scale, pw, 30f * scale), _totalBananas, 26f * scale, _wTag, " collected");
 
-        // Wardrobe row of cards.
-        int n = Monkeys.Length;
-        float rowY = py + ph * 0.58f, rowH = ph * 0.36f, cgap = 16f * scale;
-        float cardW = (pw * 0.9f - cgap * (n - 1)) / n;
+        // Wardrobe — one page of monkey cards with arrow navigation.
+        const int perPage = 4;
+        int pageCount = (Monkeys.Length + perPage - 1) / perPage;
+        _wardPage = Mathf.Clamp(_wardPage, 0, pageCount - 1);
+        int start = _wardPage * perPage;
+        int count = Mathf.Min(perPage, Monkeys.Length - start);
+
+        int n = perPage; // size the layout for a full page so cards stay aligned
+        float rowY = py + ph * 0.55f, rowH = ph * 0.33f, cgap = 14f * scale;
+        float cardW = (pw * 0.80f - cgap * (n - 1)) / n; // leave room for the arrows
         float cardH = Mathf.Min(rowH, cardW * 1.28f);
         float startX = px + (pw - (cardW * n + cgap * (n - 1))) * 0.5f;
 
@@ -297,12 +339,13 @@ public partial class FlappyBird
             _wCardW = icw; _wCardH = ich;
         }
 
-        for (int i = 0; i < n; i++)
+        for (int k = 0; k < count; k++)
         {
+            int i = start + k;
             var m = Monkeys[i];
             bool unlocked = _totalBananas >= m.need;
             bool equipped = i == _equipped;
-            float cx = startX + i * (cardW + cgap);
+            float cx = startX + k * (cardW + cgap);
             var card = new Rect(cx, rowY, cardW, cardH);
 
             GUI.DrawTexture(card, equipped ? _wCardSel : _wCard);
@@ -335,10 +378,28 @@ public partial class FlappyBird
                 DrawBananaCount(tagR, m.need, 22f * scale, _wTag, "");
             }
 
-            // Whole unlocked card acts as the equip button (invisible, drawn on top).
             if (unlocked && !equipped && GUI.Button(card, GUIContent.none, GUIStyle.none))
                 EquipSkin(i);
         }
+
+        // Page arrows + indicator.
+        if (_wArrowL == null) _wArrowL = Resources.Load<Texture2D>("Items/arrow_left");
+        if (_wArrowR == null) _wArrowR = Resources.Load<Texture2D>("Items/arrow_right");
+        float aSz = 60f * scale, aY = rowY + cardH * 0.5f - aSz * 0.5f;
+        if (_wardPage > 0)
+        {
+            var lr = new Rect(px + 6f * scale, aY, aSz, aSz);
+            if (_wArrowL != null) GUI.DrawTexture(lr, _wArrowL, ScaleMode.ScaleToFit);
+            if (GUI.Button(lr, GUIContent.none, GUIStyle.none)) _wardPage--;
+        }
+        if (_wardPage < pageCount - 1)
+        {
+            var rr = new Rect(px + pw - aSz - 6f * scale, aY, aSz, aSz);
+            if (_wArrowR != null) GUI.DrawTexture(rr, _wArrowR, ScaleMode.ScaleToFit);
+            if (GUI.Button(rr, GUIContent.none, GUIStyle.none)) _wardPage++;
+        }
+        _wTag.normal.textColor = new Color(0.92f, 0.92f, 0.96f);
+        ShadowLabel(new Rect(px, rowY + cardH + 8f * scale, pw, 26f * scale), "Page " + (_wardPage + 1) + " / " + pageCount, _wTag);
     }
 
     void EnsureWardrobeStyles(float scale)

@@ -22,6 +22,8 @@ public partial class FlappyBird : MonoBehaviour
     const float GroundTop = -4f;       // world y of the jungle floor surface
     const float MonkeyX = -3.2f;       // monkey is fixed on x, world scrolls past
     const float MonkeyHalf = 0.28f;    // half-extent used for collision
+    const float MonkeySpriteSize = 2.0f; // visual size of the monkey billboard (world units)
+    const float FlapAnimDur = 0.22f;   // how long the flap pose + squash-stretch plays
 
     const float Gravity = -20f;
     const float FlapVelocity = 7f;
@@ -31,6 +33,14 @@ public partial class FlappyBird : MonoBehaviour
     const float TreeGap = 3.4f;        // vertical opening the monkey flies through
     const float TreeSpacing = 3.7f;    // horizontal distance between tree pairs
     const int TreeCount = 6;
+    const float TreeSpriteW = 2.5f;    // flat tree-pipe sprite width (world units)
+    const float TreeSpriteH = 14f;     // flat tree-pipe sprite height (trunk runs off-screen)
+    const float BananaSpriteSize = 0.85f; // flat cartoon banana sprite size (world units)
+    const float PowSpriteSize = 0.95f;    // power-up icon size (world units)
+    const float PowSpawnChance = 0.17f;   // chance a placed tree carries a power-up instead of a banana
+    const float PowSlowDur = 4.5f, PowMagnetDur = 6f, Pow2xDur = 8f;
+    const float SlowFactor = 0.55f;       // scroll-speed multiplier while Slow-Mo is active
+    const float MagnetRange = 2.6f;       // world radius the banana magnet pulls from
 
     const float BananaCollectR = 0.55f; // monkey-to-banana distance that counts as a pickup
 
@@ -42,10 +52,22 @@ public partial class FlappyBird : MonoBehaviour
     // Selectable monkey skins: display name, fur colour, and lifetime bananas needed to unlock.
     static readonly (string name, Color color, int need)[] Monkeys =
     {
-        ("Brown",  new Color(0.45f, 0.28f, 0.15f), 0),
-        ("Yellow", new Color(0.95f, 0.80f, 0.15f), 50),
-        ("Blue",   new Color(0.30f, 0.55f, 0.95f), 100),
-        ("Green",  new Color(0.35f, 0.75f, 0.35f), 300),
+        ("Brown",    new Color(0.486f, 0.306f, 0.165f), 0),
+        ("Yellow",   new Color(0.941f, 0.776f, 0.157f), 50),
+        ("Blue",     new Color(0.314f, 0.549f, 0.949f), 100),
+        ("Green",    new Color(0.353f, 0.745f, 0.361f), 300),
+        ("Red",      new Color(0.902f, 0.251f, 0.220f), 600),
+        ("Orange",   new Color(0.980f, 0.549f, 0.149f), 1000),
+        ("Purple",   new Color(0.588f, 0.361f, 0.847f), 1500),
+        ("Pink",     new Color(0.980f, 0.549f, 0.722f), 2200),
+        ("Cyan",     new Color(0.298f, 0.800f, 0.847f), 3000),
+        ("Lime",     new Color(0.620f, 0.847f, 0.251f), 4200),
+        ("Gray",     new Color(0.549f, 0.573f, 0.620f), 5800),
+        ("Magenta",  new Color(0.847f, 0.204f, 0.549f), 8000),
+        ("Teal",     new Color(0.133f, 0.698f, 0.667f), 11000),
+        ("Lavender", new Color(0.745f, 0.620f, 0.957f), 15000),
+        ("Crimson",  new Color(0.808f, 0.118f, 0.290f), 20000),
+        ("Mint",     new Color(0.431f, 0.871f, 0.651f), 26000),
     };
 
     // Flip to true to log score/banana/skin events to the Editor/Player log for verification.
@@ -74,15 +96,19 @@ public partial class FlappyBird : MonoBehaviour
     float _rightEdge;   // world x of the screen's right edge (recomputed per frame)
     float _tileW;       // ground tile width
 
-    Material _trunkMat;
-    Material _foliageMat;
-    Material _foliageDarkMat; // canopy lowlights for depth
-    Material _woodCapMat;     // light cut-log end
-    Material _woodRingMat;    // cut-log inner ring
-    Material _vineMat;        // hanging vines
-    Material _bananaMat;
-    Material _bananaTipMat;   // banana stem / tip
-    Material _furMat;   // monkey fur; recoloured when a skin is equipped
+    Material _treeMat;        // flat cartoon tree-pipe sprite (shared by all pipes)
+    Material _bananaMat;      // flat cartoon banana sprite
+    Material[] _powMat;       // power-up icon materials (shield / slow / magnet / 2x)
+    Transform _shieldBubble;  // follows the monkey while shielded
+    bool _shield;
+    float _slowTimer, _magnetTimer, _x2Timer, _invuln;
+    Texture2D[] _powTex;      // HUD power-up icons (lazy-loaded)
+    // Monkey sprite (flat 2D billboard) — frames are per-skin, swapped on equip/flap.
+    Renderer _monkeyRenderer;
+    Material _monkeyMat;   // the unlit transparent sprite material (frames set as mainTexture)
+    Vector3 _monkeyBaseScale;
+    Texture2D _idleTex, _flapTex;
+    float _flapAnim;    // >0 while the flap pose / squash-stretch plays out
 
     /// <summary>One tree pair: a root plus its precomputed gap centre, score flag,
     /// and the banana that sits in the gap for the monkey to collect.</summary>
@@ -93,8 +119,12 @@ public partial class FlappyBird : MonoBehaviour
         public Transform bottom;
         public Transform banana;
         public float gapCenter;
+        public float gap;        // the opening this tree was placed with (shrinks past tree 100)
         public bool scored;
         public bool collected;
+        public Transform powerup; // optional power-up riding in the gap (instead of a banana)
+        public int powerType;     // 0 shield, 1 slow, 2 magnet, 3 x2
+        public bool hasPower;     // true while an uncollected power-up rides this tree
     }
 
     // ---- Setup --------------------------------------------------------------
@@ -115,10 +145,22 @@ public partial class FlappyBird : MonoBehaviour
         if (Monkeys[_equipped].need > _totalBananas) _equipped = 0; // safety: never keep a locked skin
     }
 
-    /// <summary>Tree/ground speed ramps gently with score, then caps out.</summary>
+    /// <summary>Tree/ground speed ramps gently with score, then caps out. A second,
+    /// milder step-up kicks in after tree 100 so long runs stay challenging.</summary>
     float CurrentSpeed()
     {
-        return ScrollSpeed + Mathf.Min(_score * 0.05f, 2.6f);
+        float s = ScrollSpeed + Mathf.Min(_score * 0.05f, 2.6f);
+        if (_score > 100) s += Mathf.Min((_score - 100) * 0.03f, 1.6f);
+        if (_slowTimer > 0f) s *= SlowFactor;
+        return s;
+    }
+
+    /// <summary>The gap opening — full size until tree 100, then narrows a little
+    /// (never below a fair minimum) so it gets a bit harder as well as faster.</summary>
+    float CurrentGap()
+    {
+        if (_score <= 100) return TreeGap;
+        return Mathf.Max(TreeGap - (_score - 100) * 0.01f, TreeGap - 0.7f);
     }
 
     // ---- Lifecycle transitions ---------------------------------------------
@@ -131,6 +173,11 @@ public partial class FlappyBird : MonoBehaviour
         _readyBaseY = 0.4f;
         _monkey.position = new Vector3(MonkeyX, _readyBaseY, 0f);
         _monkey.rotation = Quaternion.identity;
+        _flapAnim = 0f;
+        _monkey.localScale = _monkeyBaseScale;
+        SetMonkeyFrame(false);
+        _shield = false; _slowTimer = 0f; _magnetTimer = 0f; _x2Timer = 0f; _invuln = 0f;
+        if (_shieldBubble != null) _shieldBubble.gameObject.SetActive(false);
 
         // Park the pool off-screen to the right, spaced out, with fresh gaps.
         _rightEdge = _cam.orthographicSize * _cam.aspect;
@@ -147,6 +194,7 @@ public partial class FlappyBird : MonoBehaviour
     {
         _state = State.Playing;
         _monkeyVel = FlapVelocity;
+        TriggerFlap();
         for (int i = 0; i < _trees.Length; i++) _trees[i].scored = false;
     }
 
@@ -166,10 +214,50 @@ public partial class FlappyBird : MonoBehaviour
         if (DebugScore) Debug.Log($"[JungleHop] autosave: totalBananas={_totalBananas} (+{_bananas} this run)");
     }
 
-    /// <summary>Recolours the monkey's fur to the equipped skin.</summary>
+    /// <summary>Loads the equipped skin's idle/flap sprite frames and shows the
+    /// current one. Called on build and whenever a skin is equipped.</summary>
     void ApplyMonkeyColor()
     {
-        if (_furMat != null) _furMat.color = Monkeys[_equipped].color;
+        if (_monkeyRenderer == null) return;
+        string key = Monkeys[_equipped].name.ToLower();
+        _idleTex = Resources.Load<Texture2D>("Monkey/" + key + "_idle");
+        _flapTex = Resources.Load<Texture2D>("Monkey/" + key + "_flap");
+        // A fresh Quad ships with an opaque default material, which would render the
+        // sprite's transparent pixels as solid black. Force the unlit transparent
+        // sprite material instead.
+        if (_monkeyMat == null) _monkeyMat = Art.SpriteMat(_idleTex);
+        _monkeyRenderer.sharedMaterial = _monkeyMat;
+        SetMonkeyFrame(_flapAnim > 0f);
+    }
+
+    /// <summary>Swaps the billboard between the idle and flap frames.</summary>
+    void SetMonkeyFrame(bool flap)
+    {
+        if (_monkeyMat != null) _monkeyMat.mainTexture = (flap && _flapTex != null) ? _flapTex : _idleTex;
+    }
+
+    /// <summary>Kicks off the flap pose + squash-stretch (called on every flap).</summary>
+    void TriggerFlap()
+    {
+        _flapAnim = FlapAnimDur;
+        SetMonkeyFrame(true);
+    }
+
+    /// <summary>Per-frame sprite animation: hold the flap pose briefly, then ease back
+    /// to idle with a squash-stretch pop that settles to the base scale.</summary>
+    void AnimateMonkey(float dt)
+    {
+        if (_monkey == null) return;
+        if (_flapAnim > 0f)
+        {
+            _flapAnim -= dt;
+            if (_flapAnim <= 0f) { _flapAnim = 0f; SetMonkeyFrame(false); }
+        }
+        float s = FlapAnimDur > 0f ? _flapAnim / FlapAnimDur : 0f; // 1 right after a flap -> 0
+        Vector3 sc = _monkeyBaseScale;
+        sc.y *= 1f + 0.20f * s;
+        sc.x *= 1f - 0.12f * s;
+        _monkey.localScale = sc;
     }
 
     /// <summary>Equips a skin if it's unlocked, persisting the choice.</summary>
@@ -186,18 +274,36 @@ public partial class FlappyBird : MonoBehaviour
 
     void PlaceTree(Tree t, float x)
     {
-        float min = GroundTop + TreeGap * 0.5f + 0.6f;
-        float max = OrthoSize - TreeGap * 0.5f - 0.6f;
+        float gap = CurrentGap();
+        t.gap = gap;
+        float min = GroundTop + gap * 0.5f + 0.6f;
+        float max = OrthoSize - gap * 0.5f - 0.6f;
         t.gapCenter = Random.Range(min, max);
         t.root.position = new Vector3(x, 0f, 0.5f);
-        t.top.localPosition = new Vector3(0f, t.gapCenter + TreeGap * 0.5f + 7f, 0f);
-        t.bottom.localPosition = new Vector3(0f, t.gapCenter - TreeGap * 0.5f - 7f, 0f);
+        t.top.localPosition = new Vector3(0f, t.gapCenter + gap * 0.5f + 7f, 0f);
+        t.bottom.localPosition = new Vector3(0f, t.gapCenter - gap * 0.5f - 7f, 0f);
         t.scored = false; // a freshly (re)placed tree is scoreable again; recycling forgot this and capped score at TreeCount
 
-        // Drop a fresh banana in the gap (local z -0.5 puts it on the monkey's z=0 plane).
-        t.banana.localPosition = new Vector3(0f, t.gapCenter, -0.5f);
-        t.banana.gameObject.SetActive(true);
-        t.collected = false;
+        // The gap carries either a banana or (occasionally) a power-up.
+        if (Random.value < PowSpawnChance)
+        {
+            t.hasPower = true;
+            t.powerType = Random.Range(0, 4);
+            t.powerup.GetComponent<Renderer>().sharedMaterial = _powMat[t.powerType];
+            t.powerup.localPosition = new Vector3(0f, t.gapCenter, -0.5f);
+            t.powerup.localScale = new Vector3(PowSpriteSize, PowSpriteSize, 1f);
+            t.powerup.gameObject.SetActive(true);
+            t.banana.gameObject.SetActive(false);
+            t.collected = true;  // no banana on a power-up tree
+        }
+        else
+        {
+            t.hasPower = false;
+            t.powerup.gameObject.SetActive(false);
+            t.banana.localPosition = new Vector3(0f, t.gapCenter, -0.5f);
+            t.banana.gameObject.SetActive(true);
+            t.collected = false;
+        }
     }
 
     /// <summary>
@@ -264,7 +370,7 @@ public partial class FlappyBird : MonoBehaviour
                 break;
 
             case State.Playing:
-                if (flap) _monkeyVel = FlapVelocity;
+                if (flap) { _monkeyVel = FlapVelocity; TriggerFlap(); }
                 Simulate(Time.deltaTime);
                 break;
 
@@ -284,6 +390,7 @@ public partial class FlappyBird : MonoBehaviour
                 break;
         }
 
+        AnimateMonkey(Time.deltaTime);
         ScrollDecor(Time.deltaTime, (_state == State.GameOver || _state == State.Paused) ? 0f : 1f);
     }
 
@@ -302,6 +409,8 @@ public partial class FlappyBird : MonoBehaviour
         // Tilt with velocity for that classic flappy feel.
         float angle = Mathf.Clamp(_monkeyVel * 5f, -70f, 28f);
         _monkey.rotation = Quaternion.Lerp(_monkey.rotation, Quaternion.Euler(0f, 0f, angle), dt * 10f);
+
+        UpdatePowerups(dt);
 
         // Move trees, recycle, score, and collide.
         float leftmostRecycleX = -_rightEdge - TreeHalfW - 1f;
@@ -325,29 +434,90 @@ public partial class FlappyBird : MonoBehaviour
                 if (DebugScore) Debug.Log($"[JungleHop] score={_score} (tree {i} crossed monkey at x={rp.x:F2})");
             }
 
-            // Banana pickup: collect on overlap, otherwise spin it to catch the eye.
+            // Banana pickup — the magnet pulls nearby ones in; 2x doubles the gain.
             if (!t.collected)
             {
                 Vector3 bp = t.banana.position;
-                if (Mathf.Abs(bp.x - MonkeyX) < BananaCollectR && Mathf.Abs(bp.y - pos.y) < BananaCollectR)
+                float cr = BananaCollectR;
+                if (_magnetTimer > 0f)
+                {
+                    float d = Vector2.Distance(new Vector2(bp.x, bp.y), new Vector2(MonkeyX, pos.y));
+                    if (d < MagnetRange)
+                    {
+                        t.banana.position = Vector3.MoveTowards(bp, new Vector3(MonkeyX, pos.y, bp.z), 9f * dt);
+                        bp = t.banana.position;
+                        cr = BananaCollectR + 0.2f;
+                    }
+                }
+                if (Mathf.Abs(bp.x - MonkeyX) < cr && Mathf.Abs(bp.y - pos.y) < cr)
                 {
                     t.collected = true;
                     t.banana.gameObject.SetActive(false);
-                    _bananas++;
+                    _bananas += _x2Timer > 0f ? 2 : 1;
                     PlayBanana();
-                    if (DebugScore) Debug.Log($"[JungleHop] banana={_bananas} (collected from tree {i})");
                 }
                 else
                 {
-                    t.banana.Rotate(0f, 220f * dt, 0f);
+                    float sx = BananaSpriteSize * Mathf.Cos(Time.time * 4f + t.root.position.x);
+                    t.banana.localScale = new Vector3(sx, BananaSpriteSize, 1f);
                 }
             }
 
-            if (Overlaps(t, pos.y)) { Die(); return; }
+            // Power-up pickup.
+            if (t.hasPower)
+            {
+                Vector3 pp = t.powerup.position;
+                if (Mathf.Abs(pp.x - MonkeyX) < BananaCollectR + 0.2f && Mathf.Abs(pp.y - pos.y) < BananaCollectR + 0.2f)
+                {
+                    t.hasPower = false;
+                    t.powerup.gameObject.SetActive(false);
+                    ActivatePower(t.powerType);
+                }
+                else
+                {
+                    float sx = PowSpriteSize * Mathf.Cos(Time.time * 3f + t.root.position.x);
+                    t.powerup.localScale = new Vector3(sx, PowSpriteSize, 1f);
+                }
+            }
+
+            // Collision — the shield absorbs one hit and grants brief invulnerability.
+            if (_invuln <= 0f && Overlaps(t, pos.y))
+            {
+                if (_shield) { _shield = false; _invuln = 0.9f; }
+                else { Die(); return; }
+            }
         }
 
         // Ground / floor.
         if (pos.y - MonkeyHalf <= GroundTop) Die();
+    }
+
+    /// <summary>Applies a collected power-up's effect.</summary>
+    void ActivatePower(int type)
+    {
+        switch (type)
+        {
+            case 0: _shield = true; break;
+            case 1: _slowTimer = PowSlowDur; break;
+            case 2: _magnetTimer = PowMagnetDur; break;
+            case 3: _x2Timer = Pow2xDur; break;
+        }
+        PlayBanana();
+    }
+
+    /// <summary>Ticks power-up timers and keeps the shield bubble on the monkey.</summary>
+    void UpdatePowerups(float dt)
+    {
+        if (_slowTimer > 0f) _slowTimer -= dt;
+        if (_magnetTimer > 0f) _magnetTimer -= dt;
+        if (_x2Timer > 0f) _x2Timer -= dt;
+        if (_invuln > 0f) _invuln -= dt;
+        if (_shieldBubble != null)
+        {
+            bool on = _shield || _invuln > 0f;
+            if (_shieldBubble.gameObject.activeSelf != on) _shieldBubble.gameObject.SetActive(on);
+            if (on) _shieldBubble.position = new Vector3(_monkey.position.x, _monkey.position.y, -0.1f);
+        }
     }
 
     float RightmostTreeX()
@@ -362,21 +532,14 @@ public partial class FlappyBird : MonoBehaviour
     {
         float dx = Mathf.Abs(t.root.position.x - MonkeyX);
         if (dx > TreeHalfW + MonkeyHalf) return false; // no horizontal overlap
-        bool hitTop = monkeyY + MonkeyHalf > t.gapCenter + TreeGap * 0.5f;
-        bool hitBottom = monkeyY - MonkeyHalf < t.gapCenter - TreeGap * 0.5f;
+        bool hitTop = monkeyY + MonkeyHalf > t.gapCenter + t.gap * 0.5f;
+        bool hitBottom = monkeyY - MonkeyHalf < t.gapCenter - t.gap * 0.5f;
         return hitTop || hitBottom;
     }
 
     void ScrollDecor(float dt, float scale)
     {
         float move = CurrentSpeed() * dt * scale;
-        for (int i = 0; i < _ground.Length; i++)
-        {
-            Vector3 g = _ground[i].position;
-            g.x -= move;
-            if (g.x <= -_tileW) g.x += _tileW * 2f;
-            _ground[i].position = g;
-        }
         if (_clouds != null)
         {
             for (int i = 0; i < _clouds.Length; i++)
