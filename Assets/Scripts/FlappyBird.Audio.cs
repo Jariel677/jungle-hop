@@ -30,31 +30,66 @@ public partial class FlappyBird
         if (_sfx == null || _bananaClip == null) return;
         if (Time.time - _lastBananaTime > 1.2f) _bananaCombo = 0;
         _lastBananaTime = Time.time;
-        _sfx.pitch = 1f + Mathf.Min(_bananaCombo, 10) * 0.05f; // caps at +50%
-        _sfx.PlayOneShot(_bananaClip, 0.7f);
+        _sfx.pitch = 1f + Mathf.Min(_bananaCombo, 5) * 0.02f;  // subtle lift only, caps at +10%
+        _sfx.PlayOneShot(_bananaClip, 0.5f);
         _bananaCombo++;
     }
 
-    /// <summary>Builds a rising two-harmonic blip with a sine (bell) envelope so it
-    /// has no start/end clicks.</summary>
+    /// <summary>Builds a soft two-note marimba/harp pluck (A4 then C#5, a warm major
+    /// third) — a mellow, refined "collect" with a natural mallet decay, no siren
+    /// rise and no piercing high frequencies. Click-free via attack ramp + tail fade.</summary>
     AudioClip MakePickupClip()
     {
         const int rate = 44100;
-        const float dur = 0.13f;                          // short and light
+        const float dur = 0.28f;                          // short, with a gentle decay tail
         int n = (int)(rate * dur);
         var data = new float[n];
-        float phase = 0f;
+
+        const float f1 = 440.00f;                         // A4
+        const float f2 = 554.37f;                         // C#5 (major third up)
+        const float note2Start = 0.085f;                  // slight arpeggio between the two notes
+        float ph1 = 0f, ph2 = 0f;
+
         for (int i = 0; i < n; i++)
         {
-            float prog = (float)i / n;
-            float freq = Mathf.Lerp(520f, 780f, prog);    // lower/warmer than before, less piercing
-            phase += 2f * Mathf.PI * freq / rate;
-            float env = Mathf.Sin(Mathf.PI * prog);       // 0 -> 1 -> 0, click-free
-            float wave = Mathf.Sin(phase) + 0.2f * Mathf.Sin(2f * phase); // gentle warmth
-            data[i] = wave * env * 0.3f;
+            float t = (float)i / rate;
+
+            // First note: quick attack, exponential mallet decay, warm harmonics.
+            float e1 = PluckEnv(t, 0.004f, 9f);
+            ph1 += 2f * Mathf.PI * f1 / rate;
+            float v1 = Mathf.Sin(ph1) + 0.30f * Mathf.Sin(2f * ph1) + 0.08f * Mathf.Sin(3f * ph1);
+
+            // Second note enters a touch later for a pleasant two-note lift.
+            float v2 = 0f;
+            float t2 = t - note2Start;
+            if (t2 > 0f)
+            {
+                float e2 = PluckEnv(t2, 0.004f, 9f);
+                ph2 += 2f * Mathf.PI * f2 / rate;
+                v2 = (Mathf.Sin(ph2) + 0.30f * Mathf.Sin(2f * ph2) + 0.08f * Mathf.Sin(3f * ph2)) * e2;
+            }
+            v1 *= e1;
+
+            float s = (v1 * 0.55f + v2 * 0.62f) * 0.5f;
+
+            // Tail fade over the last 12 ms so the clip never ends on a click.
+            float fadeSamples = 0.012f * rate;
+            if (i > n - fadeSamples) s *= (n - i) / fadeSamples;
+
+            data[i] = Mathf.Clamp(s, -0.99f, 0.99f);
         }
+
         AudioClip clip = AudioClip.Create("bananaPickup", n, 1, rate, false);
         clip.SetData(data, 0);
         return clip;
+    }
+
+    /// <summary>Fast linear attack then exponential decay — a natural plucked/mallet
+    /// envelope. <paramref name="decay"/> is the per-second decay rate.</summary>
+    static float PluckEnv(float t, float attack, float decay)
+    {
+        if (t < 0f) return 0f;
+        float a = t < attack ? (t / attack) : 1f;
+        return a * Mathf.Exp(-decay * t);
     }
 }
