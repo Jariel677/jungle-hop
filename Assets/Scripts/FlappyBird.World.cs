@@ -41,7 +41,6 @@ public partial class FlappyBird
         // Materials.
         Material dirt = Art.Mat(new Color(0.42f, 0.30f, 0.16f), 0f, 0.1f);   // jungle earth
         Material moss = Art.Mat(new Color(0.24f, 0.50f, 0.20f), 0f, 0.1f);   // mossy grass
-        Material bushDark = Art.Mat(new Color(0.16f, 0.42f, 0.18f), 0f, 0.1f); // bg foliage
         _trunkMat = Art.Mat(new Color(0.45f, 0.30f, 0.16f), 0f, 0.12f);      // tree trunk
         _foliageMat = Art.Mat(new Color(0.26f, 0.60f, 0.26f), 0f, 0.15f);    // tree leaves (bright)
         _foliageDarkMat = Art.Mat(new Color(0.16f, 0.44f, 0.18f), 0f, 0.12f);// canopy lowlights
@@ -80,18 +79,6 @@ public partial class FlappyBird
                       new Vector3(_tileW, 0.22f, 1f), moss, "moss");
             g.position = new Vector3(i * _tileW, GroundTop, 1f);
             _ground[i] = g;
-        }
-
-        // Background foliage — dark-green bush clumps drifting slowly for parallax.
-        for (int i = 0; i < _bgFoliage.Length; i++)
-        {
-            var c = new GameObject("Bush" + i).transform;
-            c.SetParent(transform, true);
-            Art.Solid(PrimitiveType.Cube, c, Vector3.zero, new Vector3(2.0f, 1.1f, 1f), bushDark, "leaves");
-            Art.Solid(PrimitiveType.Cube, c, new Vector3(0.9f, -0.2f, 0f), new Vector3(1.3f, 0.8f, 1f), bushDark, "leaves");
-            Art.Solid(PrimitiveType.Cube, c, new Vector3(-0.9f, -0.2f, 0f), new Vector3(1.2f, 0.7f, 1f), bushDark, "leaves");
-            c.position = new Vector3(i * 4.2f - 6f, 2.6f - (i % 3) * 1.4f, 5f);
-            _bgFoliage[i] = c;
         }
 
         // Clouds — soft sprites from the UI pack drifting far back for extra depth.

@@ -62,7 +62,6 @@ public partial class FlappyBird : MonoBehaviour
     float _readyBaseY;
 
     Transform[] _ground = new Transform[2];
-    Transform[] _bgFoliage = new Transform[5];
     Transform[] _clouds;
     Transform _backdrop;     // in-game jungle scene behind the gameplay
     Tree[] _trees;
@@ -377,13 +376,6 @@ public partial class FlappyBird : MonoBehaviour
             g.x -= move;
             if (g.x <= -_tileW) g.x += _tileW * 2f;
             _ground[i].position = g;
-        }
-        for (int i = 0; i < _bgFoliage.Length; i++)
-        {
-            Vector3 c = _bgFoliage[i].position;
-            c.x -= move * 0.3f;
-            if (c.x < -_rightEdge - 3f) c.x = _rightEdge + 3f;
-            _bgFoliage[i].position = c;
         }
         if (_clouds != null)
         {
