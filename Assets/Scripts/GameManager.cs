@@ -496,6 +496,12 @@ public class GameManager : MonoBehaviour
 
         _power_ = new GUIStyle(_hud) { alignment = TextAnchor.MiddleCenter };
         _power_.fontSize = Mathf.RoundToInt(s * 0.042f);
+
+        // Apply the bundled game font to every HUD style (no-op if not imported yet).
+        Font f = Resources.Load<Font>("Fonts/GameFont");
+        if (f != null)
+            foreach (var st in new[] { _hud, _sub, _hudRight, _big, _mid, _btn, _power_ })
+                st.font = f;
     }
 
     void OnGUI()

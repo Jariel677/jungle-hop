@@ -23,14 +23,20 @@ public partial class FlappyBird
     Texture2D _wFur, _wFace, _wLock;
     GUIStyle _wTitle, _wName, _wTag;
 
+    Font _uiFont;
+    /// <summary>Bundled game font (Resources/Fonts/GameFont); null until Unity imports it.</summary>
+    Font UiFont => _uiFont != null ? _uiFont : (_uiFont = Resources.Load<Font>("Fonts/GameFont"));
+
     void OnGUI()
     {
         if (_big == null)
         {
-            _big = new GUIStyle(GUI.skin.label) { fontSize = 54, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            _mid = new GUIStyle(GUI.skin.label) { fontSize = 30, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
+            _big = new GUIStyle(GUI.skin.label) { fontSize = 54, alignment = TextAnchor.MiddleCenter };
+            _mid = new GUIStyle(GUI.skin.label) { fontSize = 30, alignment = TextAnchor.MiddleCenter };
             _small = new GUIStyle(GUI.skin.label) { fontSize = 20, alignment = TextAnchor.MiddleCenter };
-            _banana = new GUIStyle(GUI.skin.label) { fontSize = 24, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleRight };
+            _banana = new GUIStyle(GUI.skin.label) { fontSize = 24, alignment = TextAnchor.MiddleRight };
+            Font f = UiFont;
+            if (f != null) foreach (var st in new[] { _big, _mid, _small, _banana }) st.font = f;
         }
         _big.normal.textColor = Color.white;
         _mid.normal.textColor = Color.white;
@@ -339,9 +345,11 @@ public partial class FlappyBird
     {
         if (_wTitle == null)
         {
-            _wTitle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            _wName  = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            _wTag   = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
+            _wTitle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter };
+            _wName  = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter };
+            _wTag   = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter };
+            Font f = UiFont;
+            if (f != null) foreach (var st in new[] { _wTitle, _wName, _wTag }) st.font = f;
         }
         _wTitle.fontSize = Mathf.RoundToInt(40f * scale);
         _wTitle.normal.textColor = new Color(1f, 0.88f, 0.40f);

@@ -65,6 +65,12 @@ public class MenuUI : MonoBehaviour
         _toastSt = new GUIStyle(_title);
         _toastSt.fontSize = Mathf.RoundToInt(s * 0.04f);
         _toastSt.normal.textColor = new Color(1f, 0.9f, 0.45f);
+
+        // Apply the bundled game font to every menu style (no-op if not imported yet).
+        Font f = Resources.Load<Font>("Fonts/GameFont");
+        if (f != null)
+            foreach (var st in new[] { _title, _body, _bodyLeft, _coin, _btn, _btnBig, _tab, _tabOn, _toastSt })
+                st.font = f;
     }
 
     void Toast(string msg) { _toast = msg; _toastTimer = 2.4f; }
