@@ -13,6 +13,8 @@ using UnityEngine;
 public partial class FlappyBird
 {
     GUIStyle _big, _mid, _small, _banana;
+    Texture2D _pillTex; int _pillW = -1, _pillH = -1;  // cached banana-counter pill background
+    Texture2D _bananaIcon;                             // procedural banana glyph for the counter
 
     void OnGUI()
     {
@@ -72,9 +74,109 @@ public partial class FlappyBird
     void DrawInRun(float w, float h)
     {
         GUI.Label(new Rect(0f, h * 0.06f, w, 70f), _score.ToString(), _big);
-        // "BANANA COUNTER  N" top-right, left of the round pause button (matches the ref).
-        float px = w - PauseBtnSize - PauseBtnMargin;
-        GUI.Label(new Rect(px - 350f, PauseBtnY + 8f, 340f, 44f), "BANANA COUNTER  " + _bananas, _banana);
+        DrawBananaChip(w, h);
+    }
+
+    /// <summary>Top-right banana tally: a rounded translucent pill with a gold rim,
+    /// a banana glyph, and the count — sized to the digits and the resolution, and
+    /// vertically centred against the round pause button.</summary>
+    void DrawBananaChip(float w, float h)
+    {
+        float scale = Mathf.Clamp(h / 1080f, 0.75f, 1.7f);
+        int   ch    = Mathf.RoundToInt(56f * scale);   // pill height
+        float pad   = Mathf.Round(16f * scale);
+        float iconS = Mathf.Round(ch - pad * 1.1f);
+        float gap   = Mathf.Round(8f * scale);
+
+        _banana.fontSize  = Mathf.RoundToInt(30f * scale);
+        _banana.alignment = TextAnchor.MiddleLeft;
+        string label = _bananas.ToString();
+        float textW  = _banana.CalcSize(new GUIContent(label)).x;
+        int   cw     = Mathf.RoundToInt(pad + iconS + gap + textW + pad);
+
+        // Rebuild the pill only when its pixel size changes (i.e. a new digit appears).
+        if (_pillTex == null || _pillW != cw || _pillH != ch)
+        {
+            if (_pillTex != null) Destroy(_pillTex);
+            _pillTex = MakePill(cw, ch);
+            _pillW = cw; _pillH = ch;
+        }
+        if (_bananaIcon == null) _bananaIcon = MakeBananaIcon(72);
+
+        float x = w - PauseBtnSize - PauseBtnMargin - cw - Mathf.Round(14f * scale);
+        float y = PauseBtnY + (PauseBtnSize - ch) * 0.5f;
+
+        // Soft drop shadow, then the pill, glyph, and count.
+        Color prev = GUI.color;
+        GUI.color = new Color(0f, 0f, 0f, 0.22f);
+        GUI.DrawTexture(new Rect(x + 2f, y + 3f, cw, ch), _pillTex);
+        GUI.color = prev;
+        GUI.DrawTexture(new Rect(x, y, cw, ch), _pillTex);
+        GUI.DrawTexture(new Rect(x + pad, y + (ch - iconS) * 0.5f, iconS, iconS), _bananaIcon, ScaleMode.ScaleToFit);
+        GUI.Label(new Rect(x + pad + iconS + gap, y, textW + 4f, ch), label, _banana);
+    }
+
+    /// <summary>Builds a stadium/pill texture (dark translucent fill, soft gold rim)
+    /// at an exact pixel size, so corners stay crisp without stretching.</summary>
+    Texture2D MakePill(int w, int h)
+    {
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+        { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+        var px = new Color[w * h];
+        float hw = w * 0.5f, hh = h * 0.5f, r = hh - 1f, aa = 1.3f;
+        float bt = Mathf.Max(2f, h * 0.09f);                    // rim band thickness
+        Color fill = new Color(0.05f, 0.07f, 0.04f, 0.60f);     // dark translucent
+        Color rim  = new Color(1f, 0.85f, 0.35f, 1f);           // warm gold edge
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float qx = Mathf.Abs(x + 0.5f - hw) - (hw - r);
+                float qy = Mathf.Abs(y + 0.5f - hh) - (hh - r);
+                float d  = Mathf.Sqrt(Mathf.Max(qx, 0f) * Mathf.Max(qx, 0f) + Mathf.Max(qy, 0f) * Mathf.Max(qy, 0f))
+                           + Mathf.Min(Mathf.Max(qx, qy), 0f) - r;      // signed distance, <0 inside
+                float cov    = Mathf.Clamp01(0.5f - d / aa);            // outer anti-aliased coverage
+                float border = Mathf.Clamp01(1f - Mathf.Abs(d + bt) / bt);
+                Color c = Color.Lerp(fill, rim, border * 0.5f);
+                c.a = Mathf.Lerp(fill.a, 0.95f, border * 0.5f) * cov;
+                px[y * w + x] = c;
+            }
+        }
+        tex.SetPixels(px); tex.Apply();
+        return tex;
+    }
+
+    /// <summary>Builds a leaning banana glyph as the difference of two circles
+    /// (a crescent), gold with a darker rim. Transparent elsewhere.</summary>
+    Texture2D MakeBananaIcon(int s)
+    {
+        var tex = new Texture2D(s, s, TextureFormat.RGBA32, false)
+        { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+        var px = new Color[s * s];
+        float ang = -0.52f, ca = Mathf.Cos(ang), sa = Mathf.Sin(ang);  // ~ -30 deg lean
+        float oR = 0.92f, iR = 0.80f;                                  // outer / inner circle radii
+        Vector2 iC = new Vector2(0.42f, 0.30f);                        // inner circle offset -> crescent
+        Color body  = new Color(1f, 0.80f, 0.12f, 1f);
+        Color shade = new Color(0.80f, 0.50f, 0.05f, 1f);
+        float aa = 2f / s;
+        for (int y = 0; y < s; y++)
+        {
+            for (int x = 0; x < s; x++)
+            {
+                float nx = (x + 0.5f) / s * 2f - 1f;
+                float ny = (y + 0.5f) / s * 2f - 1f;
+                float rx = nx * ca - ny * sa, ry = nx * sa + ny * ca;
+                float dOut = Mathf.Sqrt(rx * rx + ry * ry) - oR;
+                float dIn  = Mathf.Sqrt((rx - iC.x) * (rx - iC.x) + (ry - iC.y) * (ry - iC.y)) - iR;
+                float cov  = Mathf.Clamp01(0.5f - dOut / aa) * Mathf.Clamp01(0.5f + dIn / aa);
+                if (cov <= 0f) { px[y * s + x] = new Color(0f, 0f, 0f, 0f); continue; }
+                Color c = Color.Lerp(shade, body, Mathf.Clamp01(-dOut / 0.16f)); // dark rim near outer edge
+                c.a = cov;
+                px[y * s + x] = c;
+            }
+        }
+        tex.SetPixels(px); tex.Apply();
+        return tex;
     }
 
     void DrawGameOver(float w, float h)
