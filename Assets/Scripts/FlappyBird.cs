@@ -169,6 +169,8 @@ public partial class FlappyBird : MonoBehaviour
         _state = State.Ready;
         _score = 0;
         _bananas = 0;
+        _lastBananaBucket = 0;
+        _cloudMsg = null; _cloudMsgT = 0f;
         _monkeyVel = 0f;
         _readyBaseY = 0.4f;
         _monkey.position = new Vector3(MonkeyX, _readyBaseY, 0f);
@@ -455,6 +457,9 @@ public partial class FlappyBird : MonoBehaviour
                     t.banana.gameObject.SetActive(false);
                     _bananas += _x2Timer > 0f ? 2 : 1;
                     PlayBanana();
+                    // Every 3rd banana, float a motivating message up in the clouds.
+                    int bucket = _bananas / 3;
+                    if (bucket > _lastBananaBucket) { _lastBananaBucket = bucket; TriggerCloudMessage(); }
                 }
                 else
                 {
@@ -512,6 +517,7 @@ public partial class FlappyBird : MonoBehaviour
         if (_magnetTimer > 0f) _magnetTimer -= dt;
         if (_x2Timer > 0f) _x2Timer -= dt;
         if (_invuln > 0f) _invuln -= dt;
+        if (_cloudMsgT > 0f) { _cloudMsgT -= dt; _cloudMsgDrift += dt; }
         if (_shieldBubble != null)
         {
             bool on = _shield || _invuln > 0f;

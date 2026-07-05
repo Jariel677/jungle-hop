@@ -71,6 +71,11 @@ public class MenuUI : MonoBehaviour
         if (f != null)
             foreach (var st in new[] { _title, _body, _bodyLeft, _coin, _btn, _btnBig, _tab, _tabOn, _toastSt })
                 st.font = f;
+
+        // Headers use the jungle display face (Luckiest Guy) so the wordmark and
+        // section titles read as jungle-themed; body text stays on the clean font.
+        Font tf = Resources.Load<Font>("Fonts/TitleFont");
+        if (tf != null) _title.font = tf;
     }
 
     void Toast(string msg) { _toast = msg; _toastTimer = 2.4f; }
@@ -127,7 +132,7 @@ public class MenuUI : MonoBehaviour
     void DrawHome()
     {
         GUILayout.Space(Screen.height * 0.015f);
-        GUILayout.Label("SUBWAY RUNNER", _title);
+        GUILayout.Label("JUNGLE HOP", _title);
         GUILayout.Label("◆  " + GameData.Coins + "      Best  " + GameData.HighScore, _coin);
         if (GameData.BestCombo > 1)
             GUILayout.Label("Best dodge combo  x" + GameData.BestCombo, _body);

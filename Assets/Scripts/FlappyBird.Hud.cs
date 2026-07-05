@@ -29,6 +29,76 @@ public partial class FlappyBird
     /// <summary>Bundled game font (Resources/Fonts/GameFont); null until Unity imports it.</summary>
     Font UiFont => _uiFont != null ? _uiFont : (_uiFont = Resources.Load<Font>("Fonts/GameFont"));
 
+    Font _titleFont;
+    /// <summary>Jungle display face (Resources/Fonts/TitleFont, Luckiest Guy) for the
+    /// wordmark, score, and big call-outs; null until Unity imports it.</summary>
+    Font TitleFont => _titleFont != null ? _titleFont : (_titleFont = Resources.Load<Font>("Fonts/TitleFont"));
+
+    // ---- "Message in the clouds": every 3rd banana floats a motivating line up in
+    // the sky on a drifting cloud. State lives here; the trigger fires from the
+    // banana-pickup code in FlappyBird.cs (same partial class).
+    const float CloudMsgDur = 3.2f;
+    int _lastBananaBucket;   // _bananas/3 when the last message fired (drives "every 3rd")
+    string _cloudMsg;        // active message (null = nothing showing)
+    float _cloudMsgT;        // seconds of life left on the active message
+    float _cloudMsgDrift;    // grows while shown; gives the cloud a slow drift + rise
+    Texture2D _cloudBanner;  // cloud sprite the message rides on
+    GUIStyle _cloudStyle;
+
+    static readonly string[] CloudMsgs = {
+        "You've got this!", "Keep swinging!", "Go bananas!", "Unstoppable!",
+        "Jungle legend!",   "Nice moves!",    "Monkey magic!", "Swing higher!",
+        "On fire!",         "Banana power!",
+    };
+
+    /// <summary>Picks a motivating line and starts its float-up. Called every 3rd banana.</summary>
+    void TriggerCloudMessage()
+    {
+        _cloudMsg = CloudMsgs[Random.Range(0, CloudMsgs.Length)];
+        _cloudMsgT = CloudMsgDur;
+        _cloudMsgDrift = 0f;
+    }
+
+    /// <summary>Draws the active cloud message: a motivating line on a drifting cloud
+    /// near the top of the sky, fading in then out. No-op when nothing is showing.</summary>
+    void DrawCloudMessage(float w, float h)
+    {
+        if (_cloudMsgT <= 0f || string.IsNullOrEmpty(_cloudMsg)) return;
+        if (_cloudBanner == null) _cloudBanner = Resources.Load<Texture2D>("JungleUI/clouds/2");
+
+        // Fade in over the first 0.3s, out over the last 0.7s.
+        float a = Mathf.Clamp01(Mathf.Min((CloudMsgDur - _cloudMsgT) / 0.3f, _cloudMsgT / 0.7f));
+        float scale = Mathf.Clamp(h / 1080f, 0.7f, 1.7f);
+        float bw = Mathf.Min(w * 0.62f, 560f * scale);
+        float bh = bw * 0.52f;
+        float x = (w - bw) * 0.5f + _cloudMsgDrift * 18f; // slow rightward drift
+        float y = h * 0.11f - _cloudMsgDrift * 6f;        // gently rises as it drifts
+
+        Color prev = GUI.color;
+        if (_cloudBanner != null)
+        {
+            GUI.color = new Color(1f, 1f, 1f, a);
+            GUI.DrawTexture(new Rect(x, y, bw, bh), _cloudBanner, ScaleMode.ScaleToFit);
+        }
+
+        if (_cloudStyle == null)
+        {
+            _cloudStyle = new GUIStyle(_mid) { alignment = TextAnchor.MiddleCenter, wordWrap = true, fontStyle = FontStyle.Bold };
+            Font tf = TitleFont; if (tf != null) _cloudStyle.font = tf;
+        }
+        _cloudStyle.fontSize = Mathf.RoundToInt(30f * scale);
+        Rect tr = new Rect(x, y + bh * 0.22f, bw, bh * 0.5f);
+
+        // Soft shadow, then the jungle-green text (GUI.color carries the fade alpha).
+        _cloudStyle.normal.textColor = Color.black;
+        GUI.color = new Color(1f, 1f, 1f, a * 0.32f);
+        GUI.Label(new Rect(tr.x + 2f, tr.y + 2f, tr.width, tr.height), _cloudMsg, _cloudStyle);
+        _cloudStyle.normal.textColor = new Color(0.16f, 0.42f, 0.15f);
+        GUI.color = new Color(1f, 1f, 1f, a);
+        GUI.Label(tr, _cloudMsg, _cloudStyle);
+        GUI.color = prev;
+    }
+
     void OnGUI()
     {
         if (_big == null)
@@ -39,6 +109,8 @@ public partial class FlappyBird
             _banana = new GUIStyle(GUI.skin.label) { fontSize = 24, alignment = TextAnchor.MiddleRight };
             Font f = UiFont;
             if (f != null) foreach (var st in new[] { _big, _mid, _small, _banana }) st.font = f;
+            // The big wordmark / score / call-outs use the jungle display face.
+            Font tf = TitleFont; if (tf != null) _big.font = tf;
         }
         _big.normal.textColor = Color.white;
         _mid.normal.textColor = Color.white;
@@ -91,6 +163,7 @@ public partial class FlappyBird
         GUI.Label(new Rect(0f, h * 0.06f, w, 70f), _score.ToString(), _big);
         DrawBananaChip(w, h);
         DrawActivePowerups(w, h);
+        DrawCloudMessage(w, h);
     }
 
     /// <summary>Top-left stack of the currently active power-ups, each with a
