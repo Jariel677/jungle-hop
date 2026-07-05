@@ -49,7 +49,7 @@ public partial class FlappyBird : MonoBehaviour
     };
 
     // Flip to true to log score/banana/skin events to the Editor/Player log for verification.
-    const bool DebugScore = true;
+    const bool DebugScore = false;
 
     // ---- State --------------------------------------------------------------
     enum State { Ready, Playing, GameOver, Paused }
